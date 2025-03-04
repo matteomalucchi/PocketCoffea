@@ -59,6 +59,11 @@ def met_correction_after_jec(events, METcoll, jets_pre_jec, jets_post_jec):
     newpx =  events[METcoll].px - (new_tot_px - orig_tot_px) 
     newpy =  events[METcoll].py - (new_tot_py - orig_tot_py) 
     
+    # print('jets_pre_jec.px', jets_pre_jec.px)
+    # print('jets_post_jec.px', jets_post_jec.px)
+    # print('events[METcoll].px', events[METcoll].px)
+    # print("newpx", newpx)
+    
     newMetPhi = np.arctan2(newpy, newpx)
     newMetPt = (newpx**2 + newpy**2)**0.5
     

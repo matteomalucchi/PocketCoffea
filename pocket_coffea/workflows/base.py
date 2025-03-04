@@ -668,8 +668,11 @@ class BaseProcessorABC(processor.ProcessorABC, ABC):
                 # If the nominal JEC are not requested and there is no variation corresponding to `jet_type`, do not compute the correction
                 if not jet_calib_params.apply_jec_nominal[self._year] and not any([v.split("_")[-1] == jet_type for v in variations]):
                     continue
+                if "chs" not in jet_type and "Puppi" not in jet_type :
+                    continue
                 cache = cachetools.Cache(np.inf)
                 caches.append(cache)
+                # print(jet_type, jet_coll_name)
                 jets_calibrated[jet_coll_name] = jet_correction(
                     params=self.params,
                     events=nominal_events,
@@ -683,7 +686,10 @@ class BaseProcessorABC(processor.ProcessorABC, ABC):
                     },
                     cache=cache
                 )
-
+                # print( 'eta', nominal_events[jet_coll_name].eta)
+                # print('nominal_events', nominal_events[jet_coll_name].pt,  nominal_events[jet_coll_name].pt*(1-nominal_events[jet_coll_name].rawFactor))
+                # print('jets_calibrated', jets_calibrated[jet_coll_name].pt, jets_calibrated[jet_coll_name].pt_raw, jets_calibrated[jet_coll_name].pt*(1-jets_calibrated[jet_coll_name].rawFactor))
+                
         for variation in variations:
             # BIG assumption:
             # All the code after the get_shape_variation creates additional
