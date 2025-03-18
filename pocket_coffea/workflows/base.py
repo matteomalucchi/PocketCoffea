@@ -672,7 +672,6 @@ class BaseProcessorABC(processor.ProcessorABC, ABC):
                     continue
                 cache = cachetools.Cache(np.inf)
                 caches.append(cache)
-                # print(jet_type, jet_coll_name)
                 jets_calibrated[jet_coll_name] = jet_correction(
                     params=self.params,
                     events=nominal_events,
@@ -686,9 +685,6 @@ class BaseProcessorABC(processor.ProcessorABC, ABC):
                     },
                     cache=cache
                 )
-                # print( 'eta', nominal_events[jet_coll_name].eta)
-                # print('nominal_events', nominal_events[jet_coll_name].pt,  nominal_events[jet_coll_name].pt*(1-nominal_events[jet_coll_name].rawFactor))
-                # print('jets_calibrated', jets_calibrated[jet_coll_name].pt, jets_calibrated[jet_coll_name].pt_raw, jets_calibrated[jet_coll_name].pt*(1-jets_calibrated[jet_coll_name].rawFactor))
                 
         for variation in variations:
             # BIG assumption:
