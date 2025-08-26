@@ -287,6 +287,10 @@ def jet_selection(events, jet_type, params, year, leptons_collection="", jet_tag
                 B   = "btagPNetB"
                 CvL = "btagPNetCvL"
                 CvB = "btagPNetCvB"
+            elif "UparT" in jet_tagger:
+                B   = "btagUparTAK4B"
+                CvL = "btagUparTAK4CvL"
+                CvB = "btagUparTAK4CvB"
             elif "DeepFlav" in jet_tagger:
                 B   = "btagDeepFlavB"
                 CvL = "btagDeepFlavCvL"
