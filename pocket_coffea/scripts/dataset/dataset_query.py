@@ -272,6 +272,8 @@ Some basic commands:
             return '2023_postBPix'
         elif match.group(1) == 'Run3Summer24':
             return '2024'
+        elif match.group(1) == 'Run3Winter25':
+            return '2025'
         else:
             return ""
     
