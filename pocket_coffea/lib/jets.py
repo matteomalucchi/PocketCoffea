@@ -29,7 +29,8 @@ def load_jet_factory(params):
         
 
 def jet_correction(params, events, jets, factory, jet_type, chunk_metadata, cache):
-    if chunk_metadata["year"] in ['2016_PreVFP', '2016_PostVFP','2017','2018']:
+    #if chunk_metadata["year"] in ['2016_PreVFP', '2016_PostVFP','2017','2018']:
+    if False: # using NanoAODv15, this is not present
         rho = events.fixedGridRhoFastjetAll
     else:
         rho = events.Rho.fixedGridRhoFastjetAll
