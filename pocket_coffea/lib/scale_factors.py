@@ -25,7 +25,7 @@ def get_ele_sf(
         elif key == 'id':
             sfname = electronSF["id"][params.object_preselection["Electron"]["id"]]
         
-        if year in ["2023_preBPix", "2023_postBPix"]:
+        if year in ["2023_preBPix", "2023_postBPix", "2024", "2025"]:
             # Starting from 2023 SFs require the phi:
             if key == 'reco' and pt_region == 'pt_lt_20':
                 # It also appears that for RecoBelow20 SFs the eta must be positive (absolute value).
@@ -152,7 +152,7 @@ def sf_ele_reco(params, events, year):
     if year in ['2016_PreVFP', '2016_PostVFP','2017','2018']:
         pt_ranges += [("pt_lt_20", (ele_pt < 20)), 
                       ("pt_gt_20", (ele_pt >= 20))]
-    elif year in ["2022_preEE", "2022_postEE", "2023_preBPix", "2023_postBPix"]:
+    elif year in ["2022_preEE", "2022_postEE", "2023_preBPix", "2023_postBPix", "2024", "2025"]:
         pt_ranges += [("pt_lt_20", (ele_pt < 20)), 
                       ("pt_gt_20_lt_75", (ele_pt >= 20) & (ele_pt < 75)), 
                       ("pt_gt_75", (ele_pt >= 75))]
