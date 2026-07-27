@@ -391,9 +391,9 @@ class Shape:
             type(h_dict) in [dict, defaultdict]
         ), "The Shape object receives a dictionary of hist.Hist objects as argument."
         self.group_samples()
+        self.filter_samples()
         self.is_mc_only = len(self.samples_data) == 0
         self.is_data_only = len(self.samples_mc) == 0
-        self.filter_samples()
         self.rescale_samples()
         if not self.is_data_only:
             self.replace_missing_variations()
@@ -508,6 +508,22 @@ class Shape:
                 ax = [ax for ax in h.axes if ax.name == axis_name][0]
                 if len(ax) == len(categorical_axes_dict[axis_name]):
                     categories_sorted[axis_name] = [ax.value(i) for i in range(len(ax))]
+
+        # If no sample has all the categories, we need to define a sorting
+        for axis_name in categorical_axes_dict.keys():
+            if axis_name not in categories_sorted:
+                ax_example = [ax for ax in h0.axes if ax.name == axis_name][0]
+                cats = list(categorical_axes_dict[axis_name])
+                if isinstance(ax_example, hist.axis.StrCategory):
+                    if "nominal" in cats:
+                        cats.remove("nominal")
+                        cats.sort()
+                        cats.insert(0, "nominal")
+                    else:
+                        cats.sort()
+                else:
+                    cats.sort()
+                categories_sorted[axis_name] = cats
 
         # Use the union of sets to define categorical_axes
         for i, (axis_name, categories) in enumerate(categorical_axes_dict.items()):
@@ -679,7 +695,7 @@ class Shape:
                         isMC = isMC_d
                         self.sample_is_MC[sample] = isMC
                     elif isMC != isMC_d:
-                        raise Exception("You are collapsing together data and MC histogram!")
+                        raise Exception(f"You are collapsing together data and MC histogram! \n \t Sample: {sample}, dataset: {dataset}")
 
         else:
             raise NotImplementedError("Plotting histograms without collapsing is still not implemented")

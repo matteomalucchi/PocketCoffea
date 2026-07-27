@@ -1,7 +1,8 @@
 import awkward as ak
 from .cut_definition import Cut
-from .triggers import get_trigger_mask_byprimarydataset,  apply_trigger_mask
+from .triggers import get_trigger_mask_byprimarydataset,  apply_trigger_mask, remove_trigger_prefix
 import correctionlib
+from pocket_coffea.lib.correction_cache import load_correction_set
 import numpy as np
 from coffea.lumi_tools import LumiMask
 
@@ -48,7 +49,8 @@ def get_HLTsel(primaryDatasets=None, invert=False):
             year=year,
             isMC=isMC,
             primaryDatasets=params["primaryDatasets"],
-            invert=params["invert"])
+            invert=params["invert"],
+            trigger_prefix="HLT_")
     )
 
 def get_HLTsel_custom(trigger_list, invert=False):
@@ -56,7 +58,7 @@ def get_HLTsel_custom(trigger_list, invert=False):
 
     The Cut function does not read the triggers configuration, but uses the list of triggers provided dynamically.
     '''
-    triggers_to_apply = [t.lstrip("HLT_") for t in trigger_list]
+    triggers_to_apply = [remove_trigger_prefix(t, "HLT_") for t in trigger_list]
     return Cut(
         name="HLT_trigger_"+ "_".join(trigger_list),
         params={"triggers_to_apply": triggers_to_apply,  "invert": invert},
@@ -64,7 +66,63 @@ def get_HLTsel_custom(trigger_list, invert=False):
             events,
             triggers_to_apply=params["triggers_to_apply"],
             year=year,
-            invert=params["invert"])
+            invert=params["invert"],
+            trigger_type="HLT")
+    )
+
+##############################
+## Factory methods for L1 triggers
+
+def get_L1sel(primaryDatasets=None, invert=False):
+    '''Create the L1 trigger mask
+
+    The Cut function reads the triggers configuration and create the mask.
+    For MC the OR of all the triggers in the specific configuration key is performed.
+    For DATA only the corresponding primary dataset triggers are applied.
+    if primaryDatasets param is passed, the correspoding triggers are applied, both
+    on DATA and MC, overwriting any other configuration.
+
+    This is useful to remove the overlap of primary datasets in data.
+
+    :param primaryDatasets: (optional) list of primaryDatasets to use. Overwrites any other config
+                                      both for Data and MC
+    :param invert: invert the mask, if True the function returns events failing the L1 selection
+
+    :returns: events mask
+    '''
+    name = "L1_trigger"
+    if primaryDatasets:
+        name += "_" + "_".join(primaryDatasets)
+    if invert:
+        name += "_NOT"
+    return Cut(
+        name=name,
+        params={"primaryDatasets": primaryDatasets, "invert": invert},
+        function=lambda events, params, processor_params, year, isMC,  **kwargs:  get_trigger_mask_byprimarydataset(
+            events,
+            trigger_dict=processor_params.L1_triggers,
+            year=year,
+            isMC=isMC,
+            primaryDatasets=params["primaryDatasets"],
+            invert=params["invert"],
+            trigger_prefix="L1_")
+    )
+
+def get_L1sel_custom(trigger_list, invert=False):
+    '''Create the L1 trigger mask using a custom list of triggers.
+
+    The Cut function does not read the triggers configuration, but uses the list of triggers provided dynamically.
+    '''
+    triggers_to_apply = [remove_trigger_prefix(t, "L1_") for t in trigger_list]
+    return Cut(
+        name="L1_trigger_"+ "_".join(trigger_list),
+        params={"triggers_to_apply": triggers_to_apply,  "invert": invert},
+        function=lambda events, params, processor_params, year, isMC, **kwargs:  apply_trigger_mask(
+            events,
+            triggers_to_apply=params["triggers_to_apply"],
+            year=year,
+            invert=params["invert"],
+            trigger_type="L1")
     )
 
 ###########################
@@ -77,15 +135,20 @@ def get_JetVetoMap(name="JetVetoMaps"):
     )
        
 def get_JetVetoMap_Mask(events, params, year, processor_params, sample, isMC, **kwargs):
-    jets = events.Jet
+    # Import here to prevent circular import configurator -> cuts -> cut_functions -> jets -> utils -> configurator
+    from .jets import compute_jetId
+    # For nanoV15 no jetId key in Nano anymore. 
+    # For nanoV12 (i.e. 22/23), jet Id is also buggy, should therefore be rederived
+    # in the following, if nano_version not explicitly specified in params, v9 is assumed for Run2UL, v12 for 22/23 and v15 for 2024
+    jets = ak.with_field(events["Jet"], compute_jetId(events, "Jet", processor_params, year), "jetId_corrected")
     mask_for_VetoMap = (
-        ((jets.jetId & 2)==2) # Must fulfill tight jetId
+        (jets["jetId_corrected"]>=6) # Must fulfill tightLepVeto
         & (abs(jets.eta) < 5.19) # Must be within HCal acceptance
-        & (jets.pt*(1-jets.muonSubtrFactor) > 15.) # May no be Muons misreconstructed as jets
+        & (jets.pt > 15.) # Minimum pT
         & ((jets["neEmEF"]+jets["chEmEF"])<0.9) # Energy fraction not dominated by ECal
     )
     jets = jets[mask_for_VetoMap]
-    cset = correctionlib.CorrectionSet.from_file(
+    cset = load_correction_set(
         processor_params.jet_scale_factors.vetomaps[year]["file"]
     )
     corr = cset[processor_params.jet_scale_factors.vetomaps[year]["name"]]
@@ -349,23 +412,23 @@ def nBtagEq(events, params, year, processor_params, **kwargs):
 
 
 def nElectron(events, params, year, **kwargs):
-    '''Mask for min N electrons with minpt.'''
-    if params["coll"] == "ElectronGood":
-        return events.nElectronGood >= params["N"]
-    elif params["coll"] == "Electron":
-        return events.nElectron >= params["N"]
+    '''Mask for min N electrons above `minpt`.'''
+    coll = params["coll"]
+    minpt = params.get("minpt", 0)
+    if coll in ("ElectronGood", "Electron"):
+        return ak.sum(events[coll].pt > minpt, axis=1) >= params["N"]
     else:
-        raise Exception(f"The collection '{params['coll']}' does not exist.")
+        raise Exception(f"The collection '{coll}' does not exist.")
 
 
 def nMuon(events, params, year, **kwargs):
-    '''Mask for min N electrons with minpt.'''
-    if params["coll"] == "MuonGood":
-        return events.nMuonGood >= params["N"]
-    elif params["coll"] == "Muon":
-        return events.nMuon >= params["N"]
+    '''Mask for min N muons above `minpt`.'''
+    coll = params["coll"]
+    minpt = params.get("minpt", 0)
+    if coll in ("MuonGood", "Muon"):
+        return ak.sum(events[coll].pt > minpt, axis=1) >= params["N"]
     else:
-        raise Exception(f"The collection '{params['coll']}' does not exist.")
+        raise Exception(f"The collection '{coll}' does not exist.")
 
 
 ##########################33
