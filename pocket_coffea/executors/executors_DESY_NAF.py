@@ -86,7 +86,7 @@ class ParslCondorExecutorFactory(ExecutorFactoryABC):
                             max_blocks      = self.run_options["scaleout"],
                             worker_init     = "\n".join(self.get_worker_env()),
                             requirements    = self.run_options.get("requirements", ""),
-                            scheduler_options = f'Request_Disk = {int(self.run_options["disk-per-worker"][:-2]) * 1024 * 1024}\n+RequestRuntime = {walltime_to_seconds(self.run_options["walltime"])}',
+                            scheduler_options = f'RequestDisk = {int(self.run_options["disk-per-worker"][:-2]) * 1024 * 1024}\n+RequestRuntime = {walltime_to_seconds(self.run_options["walltime"])}',
                         ),
                     )
                 ],
