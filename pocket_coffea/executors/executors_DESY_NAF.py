@@ -59,10 +59,16 @@ class ParslCondorExecutorFactory(ExecutorFactoryABC):
         ''' Start the slurm cluster here'''
         self.setup_proxyfile()
 
-        if 'afs' in self.x509_path:
+        if 'afs' in self.x509_path and walltime_to_seconds(self.run_options["walltime"])>21600:
             print("self.x509_path = ", self.x509_path)
-            print(" *Warning*: your grid proxy file is on AFS. This is not a good idea for *long* jobs submitted with screen. If/when AFS token expires the jobs will crash. Instead set the X509_USER_PROXY variable to point at DUST (in your .bashrc): \n export X509_USER_PROXY=/data/dust/user/*USERNAME*/x509up\n then re-run voms-proxy-init and set the 'voms-proxy' path in your run-options config to point to that file.")
-            
+            print(" *Warning*: your grid proxy file is on AFS. This is not a good idea for *long* jobs submitted with screen. If/when AFS token expires the jobs will crash. Instead, you should set the X509_USER_PROXY variable to point at DUST (in your .bashrc): \n export X509_USER_PROXY=/data/dust/user/*USERNAME*/x509up \n Then re-run voms-proxy-init and set the 'voms-proxy' path in your run-options config to point to that file.")
+            answer = input("Continue anyway? Type [Y] to continue: ")
+            if answer.lower() == "y":
+                pass
+            else:
+                print("Submission is terminated.")
+                sys.exit(0)
+                
         condor_htex = Config(
                 executors=[
                     HighThroughputExecutor(
@@ -80,7 +86,7 @@ class ParslCondorExecutorFactory(ExecutorFactoryABC):
                             max_blocks      = self.run_options["scaleout"],
                             worker_init     = "\n".join(self.get_worker_env()),
                             requirements    = self.run_options.get("requirements", ""),
-                            scheduler_options = "Request_Disk = %i \n+RequestRuntime = %i" % (int(self.run_options["disk-per-worker"][:-2]) * 1024 * 1024, walltime_to_seconds(self.run_options["walltime"])),
+                            scheduler_options = f'Request_Disk = {int(self.run_options["disk-per-worker"][:-2]) * 1024 * 1024}\n+RequestRuntime = {walltime_to_seconds(self.run_options["walltime"])}',
                         ),
                     )
                 ],
