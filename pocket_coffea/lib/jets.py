@@ -305,18 +305,6 @@ def btagging(Jet, btag, wp, veto=False):
         return Jet[Jet[tagger] > threshold]
 
 
-# NanoAOD b-tag discriminant branch -> the BTV correctionlib correction that
-# stores its working-point cut values. The BTV ``btagging.json.gz`` for a campaign
-# carries one ``<tagger>_wp_values`` correction per tagger, evaluated with the WP
-# name ("L"/"M"/"T"/...) to return the discriminant cut.
-_BTAG_WP_VALUES_CORRECTION = {
-    "btagDeepFlavB": "deepJet_wp_values",
-    "btagPNetB": "particleNet_wp_values",
-    "btagRobustParTAK4": "robustParticleTransformer_wp_values",
-    "btagUParTAK4": "UParTAK4_wp_values",
-}
-
-
 def get_btag_wp_score(params, year, wp, tagger):
     """Read a b-tag working-point discriminant cut from the BTV correctionlib JSON.
 
@@ -324,7 +312,7 @@ def get_btag_wp_score(params, year, wp, tagger):
     the shape SF (``jet_scale_factors.btagSF.<year>.file``), so the cut applied to
     the jets and the SF applied to them always refer to the same tagger and
     campaign. The BTV file exposes the working-point values under a
-    ``<tagger>_wp_values`` correction (see :data:`_BTAG_WP_VALUES_CORRECTION`).
+    ``<tagger>_wp_values`` correction (see ``btagging.btag_wp_values_correction`` in the parameters YAML).
 
     Args:
         params: PocketCoffea parameters (with the ``jet_scale_factors`` section).
@@ -338,11 +326,12 @@ def get_btag_wp_score(params, year, wp, tagger):
     """
     btagSF = params["jet_scale_factors"]["btagSF"][year]
     cset = load_correction_set(btagSF["file"])
-    corr_name = _BTAG_WP_VALUES_CORRECTION.get(tagger)
+    wp_values_map = params["btagging"]["btag_wp_values_correction"]
+    corr_name = wp_values_map.get(tagger)
     if corr_name is None:
         raise KeyError(
             f"No BTV working-point-values correction is known for tagger '{tagger}'. "
-            f"Known taggers: {sorted(_BTAG_WP_VALUES_CORRECTION)}."
+            f"Known taggers: {sorted(wp_values_map)}."
         )
     if corr_name not in cset:
         raise KeyError(
