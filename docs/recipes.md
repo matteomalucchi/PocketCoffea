@@ -1305,26 +1305,24 @@ def process_extra_after_skim(self):
 
 with the matching `jets_calibration` entries (`AK4PFPuppiPNetRegression` -> `JetPNet` and `AK4PFPuppiPNetRegressionPlusNeutrino` -> `JetPNetPlusNeutrino`, both with `apply_pt_regr_*: True`).
 
-The **threshold defaults to the loose (`L`) working point of the tagger used**, read (not hard-coded) from the b-tagging parameters (`pocket_coffea/parameters/btagging.yaml`, overridable by the analysis) via the `btagging_algorithm` and `btagging_WP` fields:
+The **threshold defaults to the loose (`L`) working point of the tagger used**. The working-point score is **read directly from the BTV `correctionlib` file** — the same `btagging.json.gz` that provides the shape SF (`jet_scale_factors.btagSF.<year>.file`) — so the cut on the jets and the SF applied to them always refer to the same tagger and campaign. The tagger to cut on comes from `btagging.working_point.<year>.btagging_algorithm`:
 
 ```yaml
 btagging:
   working_point:
     "2024":
       btagging_algorithm: btagUParTAK4B   # <- tagger used to build the b-tag cut
-      btagging_WP:
-        L: 0.0246                         # <- default threshold (loose WP)
-        M: 0.1272
-        T: 0.4648
 ```
+
+The WP score itself is looked up in the BTV file under the `<tagger>_wp_values` correction (e.g. `particleNet_wp_values`, `deepJet_wp_values`), evaluated with the working-point name — see `get_btag_wp_score` in `pocket_coffea/lib/jets.py`.
 
 The merge uses the same `merge_regressed_jets` helper, with fallback chains ending on the JEC-only jets. The b-tag cut is set with three arguments, so the user chooses **which discriminant** to cut on and **where**:
 
 * `btag_algorithm` — discriminant (jet field) to cut on, e.g. `"btagPNetB"`. Defaults to the `btagging_algorithm` of the parameters.
-* `btag_wp` — working-point name (`"L"`, `"M"`, `"T"`…), threshold read from the parameters. Defaults to `"L"`. Mutually exclusive with `btag_score`.
+* `btag_wp` — working-point name (`"L"`, `"M"`, `"T"`…), score read from the BTV `correctionlib` file. Defaults to `"L"`. Mutually exclusive with `btag_score`.
 * `btag_score` — a raw discriminant value used directly as the threshold.
 
-Both the flat and nested-by-tagger `btagging_WP` layouts are supported. Using it in `apply_object_preselection`:
+Using it in `apply_object_preselection`:
 
 ```python
 from pocket_coffea.lib.jets import merge_regressed_jets

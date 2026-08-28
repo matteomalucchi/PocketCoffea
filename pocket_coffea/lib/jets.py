@@ -305,26 +305,75 @@ def btagging(Jet, btag, wp, veto=False):
         return Jet[Jet[tagger] > threshold]
 
 
-def get_btag_working_point(params, year, wp="L", tagger=None):
-    """Look up a b-tag discriminant and working-point threshold from parameters.
+# NanoAOD b-tag discriminant branch -> the BTV correctionlib correction that
+# stores its working-point cut values. The BTV ``btagging.json.gz`` for a campaign
+# carries one ``<tagger>_wp_values`` correction per tagger, evaluated with the WP
+# name ("L"/"M"/"T"/...) to return the discriminant cut.
+_BTAG_WP_VALUES_CORRECTION = {
+    "btagDeepFlavB": "deepJet_wp_values",
+    "btagPNetB": "particleNet_wp_values",
+    "btagRobustParTAK4": "robustParticleTransformer_wp_values",
+    "btagUParTAK4": "UParTAK4_wp_values",
+}
 
-    Both the flat (``btagging_WP: {L: ...}``) and nested-by-tagger
-    (``btagging_WP: {<tagger>: {L: ...}}``) parameter layouts are supported.
+
+def get_btag_wp_score(params, year, wp, tagger):
+    """Read a b-tag working-point discriminant cut from the BTV correctionlib JSON.
+
+    The score is taken directly from the same ``btagging.json.gz`` that provides
+    the shape SF (``jet_scale_factors.btagSF.<year>.file``), so the cut applied to
+    the jets and the SF applied to them always refer to the same tagger and
+    campaign. The BTV file exposes the working-point values under a
+    ``<tagger>_wp_values`` correction (see :data:`_BTAG_WP_VALUES_CORRECTION`).
 
     Args:
-        params: PocketCoffea parameters (must contain the ``btagging`` section).
-        year: data-taking year key used to index the b-tagging parameters.
+        params: PocketCoffea parameters (with the ``jet_scale_factors`` section).
+        year: data-taking year key used to index ``jet_scale_factors.btagSF``.
+        wp: working-point name (e.g. ``"L"``, ``"M"``, ``"T"``).
+        tagger: b-tag discriminant branch (e.g. ``"btagPNetB"``), selecting which
+            per-tagger ``_wp_values`` correction to read.
+
+    Returns:
+        float: the discriminant cut value for the working point.
+    """
+    btagSF = params["jet_scale_factors"]["btagSF"][year]
+    cset = load_correction_set(btagSF["file"])
+    corr_name = _BTAG_WP_VALUES_CORRECTION.get(tagger)
+    if corr_name is None:
+        raise KeyError(
+            f"No BTV working-point-values correction is known for tagger '{tagger}'. "
+            f"Known taggers: {sorted(_BTAG_WP_VALUES_CORRECTION)}."
+        )
+    if corr_name not in cset:
+        raise KeyError(
+            f"Correction '{corr_name}' not found in b-tagging file "
+            f"'{btagSF['file']}'. Available corrections: {list(cset)}."
+        )
+    return float(cset[corr_name].evaluate(wp))
+
+
+def get_btag_working_point(params, year, wp="L", tagger=None):
+    """Resolve the b-tag discriminant branch and its working-point cut.
+
+    The discriminant branch (what to cut on) comes from the ``btagging``
+    parameters, while the cut value is read directly from the BTV correctionlib
+    JSON via :func:`get_btag_wp_score`, so it always matches the tagger and
+    campaign used for the shape SF.
+
+    Args:
+        params: PocketCoffea parameters (``btagging`` and ``jet_scale_factors``).
+        year: data-taking year key used to index the parameters.
         wp: working-point name (e.g. ``"L"``, ``"M"``, ``"T"``); default loose.
         tagger: b-tag discriminant branch. When ``None`` it is taken from
             ``btagging.working_point.<year>.btagging_algorithm``.
 
     Returns:
-        tuple(str, float): the tagger branch and its threshold for the WP.
+        tuple(str, float): the tagger branch and its WP cut value.
     """
     wp_params = params["btagging"]["working_point"][year]
     if tagger is None:
         tagger = wp_params["btagging_algorithm"]
-    return tagger, get_btag_wp_threshold(wp_params, wp, tagger)
+    return tagger, get_btag_wp_score(params, year, wp, tagger)
 
 
 def _resolve_btag_threshold(

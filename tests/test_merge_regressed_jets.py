@@ -10,53 +10,99 @@ algorithm, a different WP, a manual raw-score cut, and no cut at all (plain
 merge of regressed and non-regressed jets).
 """
 
+import pathlib
+import tempfile
+
 import awkward as ak
 import numpy as np
 import pytest
 
+import correctionlib.schemav2 as cs
+
 from pocket_coffea.lib.jets import (
     get_btag_working_point,
+    get_btag_wp_score,
     merge_regressed_jets,
     _resolve_btag_threshold,
 )
 
-# Minimal b-tagging parameters, in the two layouts supported by the helper.
-# flat: btagging_WP: {L: ...}          (older-year layout, e.g. Run2)
+
+def _write_btag_wp_file(directory):
+    """Write a stand-in BTV ``btagging.json.gz``-style correctionlib file.
+
+    Like the real BTV files, it carries one ``<tagger>_wp_values`` correction per
+    tagger, mapping the working-point name to its discriminant cut. The values
+    mirror the previously hard-coded WPs so the assertions stay stable.
+    """
+
+    def _wp_values(name):
+        return cs.Correction(
+            name=name,
+            version=1,
+            inputs=[cs.Variable(name="working_point", type="string")],
+            output=cs.Variable(name="value", type="real"),
+            data=cs.Category(
+                nodetype="category",
+                input="working_point",
+                content=[
+                    cs.CategoryItem(key="L", value=0.05),
+                    cs.CategoryItem(key="M", value=0.3),
+                    cs.CategoryItem(key="T", value=0.7),
+                ],
+            ),
+        )
+
+    cset = cs.CorrectionSet(
+        schema_version=2,
+        corrections=[
+            _wp_values("deepJet_wp_values"),
+            _wp_values("particleNet_wp_values"),
+        ],
+    )
+    path = str(pathlib.Path(directory) / "btagging_wp_values.json")
+    with open(path, "w") as fh:
+        fh.write(cset.model_dump_json(exclude_unset=True))
+    return path
+
+
+# The b-tag WP cuts are read from this stand-in correctionlib file (as they are
+# from the cvmfs BTV JSON in production). Created once at import time so the
+# module-level parameter sets below can reference it.
+BTAG_FILE = _write_btag_wp_file(tempfile.mkdtemp(prefix="pc_btag_wp_"))
+
+# Minimal parameters. `btagging` selects the discriminant branch to cut on;
+# `jet_scale_factors.btagSF` points at the BTV file the WP score is read from.
 FLAT_PARAMS = {
     "btagging": {
         "working_point": {
-            "2018": {
-                "btagging_algorithm": "btagDeepFlavB",
-                "btagging_WP": {"L": 0.05, "M": 0.3, "T": 0.7},
-            }
+            "2018": {"btagging_algorithm": "btagDeepFlavB"},
         }
-    }
+    },
+    "jet_scale_factors": {
+        "btagSF": {"2018": {"file": BTAG_FILE, "name": "deepJet_shape"}}
+    },
 }
-# nested-by-tagger: btagging_WP: {<tagger>: {L: ...}}
 NESTED_PARAMS = {
     "btagging": {
         "working_point": {
-            "2022_postEE": {
-                "btagging_algorithm": "btagPNetB",
-                "btagging_WP": {"btagPNetB": {"L": 0.05, "M": 0.3, "T": 0.7}},
-            }
+            "2022_postEE": {"btagging_algorithm": "btagPNetB"},
         }
-    }
+    },
+    "jet_scale_factors": {
+        "btagSF": {"2022_postEE": {"file": BTAG_FILE, "name": "particleNet_shape"}}
+    },
 }
-# two taggers available, default is btagPNetB; used to check that overriding the
-# algorithm actually switches which discriminant the cut is applied to.
+# default tagger is btagPNetB; used to check that overriding the algorithm
+# actually switches which discriminant the cut is applied to.
 MULTI_PARAMS = {
     "btagging": {
         "working_point": {
-            "2022_postEE": {
-                "btagging_algorithm": "btagPNetB",
-                "btagging_WP": {
-                    "btagPNetB": {"L": 0.05, "M": 0.3},
-                    "btagDeepFlavB": {"L": 0.05, "M": 0.3},
-                },
-            }
+            "2022_postEE": {"btagging_algorithm": "btagPNetB"},
         }
-    }
+    },
+    "jet_scale_factors": {
+        "btagSF": {"2022_postEE": {"file": BTAG_FILE, "name": "particleNet_shape"}}
+    },
 }
 
 
@@ -130,11 +176,20 @@ def _ref_neutrino_split(nonu, nu, default, thr, tagger):
     return ak.where(high & nu_valid, nu, low)
 
 
-def test_get_btag_working_point_flat_and_nested():
-    # flat layout: tagger taken from btagging_algorithm, WP read directly
+def test_get_btag_wp_score_reads_from_json():
+    # the score comes from the <tagger>_wp_values correction in the BTV file
+    assert get_btag_wp_score(FLAT_PARAMS, "2018", "L", "btagDeepFlavB") == 0.05
+    assert get_btag_wp_score(FLAT_PARAMS, "2018", "M", "btagDeepFlavB") == 0.3
+    assert get_btag_wp_score(NESTED_PARAMS, "2022_postEE", "T", "btagPNetB") == 0.7
+    # an unknown tagger has no mapped correction
+    with pytest.raises(KeyError):
+        get_btag_wp_score(FLAT_PARAMS, "2018", "L", "btagUnknown")
+
+
+def test_get_btag_working_point_resolves_tagger_and_score():
+    # tagger taken from btagging_algorithm, score read from the BTV JSON
     assert get_btag_working_point(FLAT_PARAMS, "2018") == ("btagDeepFlavB", 0.05)
     assert get_btag_working_point(FLAT_PARAMS, "2018", "M") == ("btagDeepFlavB", 0.3)
-    # nested layout: WP read from the per-tagger sub-dict
     assert get_btag_working_point(NESTED_PARAMS, "2022_postEE") == ("btagPNetB", 0.05)
     assert get_btag_working_point(NESTED_PARAMS, "2022_postEE", "T") == (
         "btagPNetB",
