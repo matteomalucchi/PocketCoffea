@@ -472,6 +472,11 @@ A list of available weights definition:
 - **sf_mu_id**, **sf_mu_iso**: muon id and isolation SF.
 - **sf_btag**: btagPOG shape scale factors
 - **sf_jet_puId**:  jet puID SF
+- **sf_trigger**: trigger scale factor computed as the product of the data/MC efficiency ratios of the single filters
+  of the trigger path. The correctionlib file with the per-filter scale factors and the observable used to evaluate each
+  of them are configured in the
+  [`trigger_scale_factors`](https://github.com/PocketCoffea/PocketCoffea/blob/main/pocket_coffea/parameters/trigger_scale_factors.yaml)
+  key of the parameters (see the [Trigger scale factors](./recipes.md#trigger-scale-factors) recipe)
 
 If a weight is requested in the configuration, but it doens't exist, the framework emits an error before running.
 

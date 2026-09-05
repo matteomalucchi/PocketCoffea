@@ -17,6 +17,7 @@ from pocket_coffea.lib.scale_factors import (
     sf_partonshower_isr,
     sf_partonshower_fsr
 )
+from pocket_coffea.lib.trigger_sf import sf_trigger, load_trigger_sf_correctionset
 
 
 ### Simple WeightWrappers from functions defined in the lib
@@ -309,6 +310,45 @@ class SF_jet_puId(WeightWrapper):
             )
 
 
+#############################################################
+class SF_trigger(WeightWrapper):
+    """Trigger scale factor computed as the product of the per-filter data/MC
+    efficiency ratios, read from a correctionlib file.
+
+    The configuration of the correctionlib file and of the observable used to
+    evaluate each filter is taken from the `trigger_scale_factors` parameters.
+    See `pocket_coffea.lib.trigger_sf` and the `Trigger scale factors` recipe in
+    the documentation.
+    """
+
+    name = "sf_trigger"
+    has_variations = True
+
+    def __init__(self, params, metadata):
+        super().__init__(params, metadata)
+        # The correctionlib file is loaded lazily at the first call of `compute`:
+        # the WeightWrapper objects are built for all the available weights, also
+        # when the trigger scale factors are not configured for the analysis.
+        self._correction_set = None
+
+    def compute(self, events, size, shape_variation):
+        if self._correction_set is None:
+            self._correction_set = load_trigger_sf_correctionset(
+                self._params, self._metadata["year"]
+            )
+        out = sf_trigger(self._params,
+                         events,
+                         year=self._metadata["year"],
+                         correction_set=self._correction_set,
+                         )
+        return WeightData(
+            name = self.name,
+            nominal = out[0],
+            up = out[1],
+            down = out[2]
+            )
+
+
     
 # List with default classes for common weights
 common_weights = [
@@ -329,6 +369,7 @@ common_weights = [
     SF_ctag,
     SF_ctag_calib,
     SF_jet_puId,
+    SF_trigger,
     SF_PSWeight_isr,
     SF_PSWeight_fsr
 ]

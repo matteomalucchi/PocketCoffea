@@ -108,6 +108,14 @@ pocket\_coffea.lib.scale\_factors module
    :undoc-members:
    :show-inheritance:
 
+pocket\_coffea.lib.trigger\_sf module
+-------------------------------------
+
+.. automodule:: pocket_coffea.lib.trigger_sf
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 pocket\_coffea.lib.triggers module
 ----------------------------------
 

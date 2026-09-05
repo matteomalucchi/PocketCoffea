@@ -1,0 +1,47 @@
+# Configuration of the trigger scale factors applied by the `sf_trigger` weight.
+#
+# The scale factors are derived filter-by-filter: the total scale factor is the
+# product of the data/MC efficiency ratios of the single filters of the trigger
+# path (plus the one of the OR of the L1 seeds), each of them evaluated as a
+# function of a different observable.
+#
+# The per-filter scale factors are read from a correctionlib file, which can be
+# produced from the ROOT files with the efficiency curves using the
+# `convert_trigger_sf` script (see the `Trigger scale factors` recipe in the
+# documentation). Each correction takes as input the `systematic`
+# (`nominal`, `up`, `down`) and the value of the observable.
+#
+# The configuration below is just a template: the file and the list of the
+# corrections have to be provided by the user for each data-taking period, e.g.
+#
+# trigger_scale_factors:
+#   "2022_postEE":
+#     file: /path/to/trigger_sf_2022_postEE.json.gz
+#     corrections:
+#       # L1 seeds efficiency, evaluated with the Calo-HT
+#       - name: sf_L1All
+#         variable:
+#           name: calojet_ht
+#           collection: Jet
+#       # HLT filters, evaluated with the pt of the n-th leading in pt jet
+#       - name: sf_4PFCentralJetTightIDPt35
+#         variable:
+#           name: jet_pt
+#           collection: JetGood
+#           index: 4
+#       # b-tagging filter, evaluated with the atanh of the average b-tagging
+#       # score of the 2 leading in b-tagging score jets
+#       - name: sf_BTagCentralJetPt35PFParticleNet2BTagSum0p65
+#         variable:
+#           name: atanh_btag_mean
+#           collection: JetGood
+#           field: btagPNetB
+#           n: 2
+#
+# The available observables are the functions registered in
+# `pocket_coffea.lib.trigger_sf.trigger_sf_variables`:
+# `jet_pt`, `alljet_ht`, `calojet_ht`, `atanh_btag_mean`.
+# Custom observables can be added by the user with the
+# `register_trigger_sf_variable` decorator.
+
+trigger_scale_factors: {}

@@ -1,6 +1,10 @@
 import awkward as ak
 from .cut_definition import Cut
-from .triggers import get_trigger_mask_byprimarydataset,  apply_trigger_mask
+from .triggers import (
+    get_trigger_mask_byprimarydataset,
+    apply_trigger_mask,
+    get_trigger_object_matching_mask,
+)
 import correctionlib
 import numpy as np
 from coffea.lumi_tools import LumiMask
@@ -66,6 +70,48 @@ def get_HLTsel_custom(trigger_list, invert=False):
             year=year,
             invert=params["invert"])
     )
+
+def get_trigger_object_matching(
+    triggers=None, collection="JetGood", dr_max=0.5, params_key="trigger_object_filters", name=None
+):
+    '''Create the trigger object matching mask.
+
+    The offline objects of `collection` are matched to the trigger objects firing
+    each of the filters of the triggers, as configured in the
+    `trigger_object_filters` parameters (see
+    `pocket_coffea.lib.triggers.get_trigger_object_matching_masks`).
+    The mask is the OR of the matching of the requested triggers.
+
+    This selection is needed to apply the trigger scale factors derived
+    filter-by-filter (see the `sf_trigger` weight).
+
+    :param triggers: (optional) list of triggers to consider. If None all the
+                     triggers configured for the year are used.
+    :param collection: collection of offline objects matched to the trigger objects
+    :param dr_max: maximum deltaR between the trigger object and the offline object
+    :param params_key: key of the parameters with the trigger filters configuration
+    '''
+    if name is None:
+        name = "trigger_object_matching"
+        if triggers is not None:
+            name += "_" + "_".join(triggers)
+    return Cut(
+        name=name,
+        params={
+            "triggers": triggers,
+            "collection": collection,
+            "dr_max": dr_max,
+            "params_key": params_key,
+        },
+        function=lambda events, params, processor_params, year, **kwargs: get_trigger_object_matching_mask(
+            events,
+            trigger_filters=processor_params[params["params_key"]][year],
+            triggers=params["triggers"],
+            collection=params["collection"],
+            dr_max=params["dr_max"],
+        ),
+    )
+
 
 ###########################
 ## Implementation of JetVetoMaps 
