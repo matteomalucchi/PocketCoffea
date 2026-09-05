@@ -1,0 +1,89 @@
+# Configuration of the trigger object matching used to validate the phase space in
+# which the per-filter trigger efficiencies (and therefore the `sf_trigger` scale
+# factor, see `trigger_scale_factors.yaml` and `pocket_coffea.lib.trigger_sf`) are
+# valid. See the "Trigger scale factors" recipe of the documentation for the full
+# description; this file only documents the structure with a commented-out example.
+#
+# N.B: the meaning of the individual bits of `TrigObj_filterBits` is NOT consistent
+# across NanoAOD versions (nor, generally, across data-taking eras that share the
+# same version): always check the NanoAOD self-documentation of the version used in
+# the analysis at https://cms-xpog.docs.cern.ch/autoDoc/ before filling this file.
+# Because of this, the filters are keyed by **NanoAOD version** (`9`, `12`, `15`, ...
+# the same integers as `parameters/nano_version.yaml`), not by data-taking year:
+# `pocket_coffea.lib.cut_functions.get_trigger_object_matching` resolves the version
+# of the chunk being processed with `pocket_coffea.utils.utils.get_nano_version` and
+# looks up the corresponding block below. Multiple years sharing the same NanoAOD
+# version (e.g. 2022 and 2023 both on v12) share the same block.
+#
+# For each NanoAOD version, this is a mapping {trigger: [filters]}: each trigger (an
+# HLT or L1 path, its name is only used to group filters and to select triggers with
+# `get_trigger_object_matching(triggers=[...])`) lists the filters that must ALL be
+# matched (AND) for that trigger; the overall cut is the OR of the requested triggers.
+#
+# Each filter can be given either as a compact string
+#
+#     "<type>:<bit>:<n_objects>:<threshold>:<name>[:<collection>]"
+#
+# or, equivalently, as a mapping with the same fields (useful when `name` or
+# `collection` need characters that do not fit the compact string, e.g. a colon):
+#
+#     {type: <type>, bit: <bit>, n_objects: <n_objects>, threshold: <threshold>,
+#      name: <name>, collection: <collection>}
+#
+# Fields:
+# - `type`: symbolic name of the trigger object type, one of the keys of
+#   `trigger_object_types.yaml` (`Jet`, `Electron`, `Muon`, `Tau`, `Photon`,
+#   `FatJet`, `BoostedTau`, `HT`, `MHT`, `MET`, or any type added there). This
+#   is what makes the matching generic across trigger objects: it selects both
+#   the numeric `TrigObj.id` to require and, unless overridden below, which
+#   offline collection the trigger objects of this filter are matched against.
+# - `bit`: index of the bit of `TrigObj_filterBits` for this filter, for the
+#   NanoAOD version of this block.
+# - `n_objects`: number of trigger objects of this type required to pass the
+#   filter (and, when the type is matchable, to be matched to an offline object).
+#   Ignored for non-matchable types (HT, MHT, MET): those are global, per-event
+#   quantities, so firing the filter at all is the requirement, regardless of
+#   `n_objects` (`0` is conventionally used for them, purely for documentation).
+# - `threshold`: online threshold of the filter. Not used by the matching itself,
+#   kept only for bookkeeping / cross-checking against the trigger name.
+# - `name`: name of the filter, matching the naming used to derive its trigger
+#   scale factor in `trigger_scale_factors.yaml` (see the conversion script
+#   documented in the recipe).
+# - `collection` (optional): offline collection to match this filter's trigger
+#   objects against, overriding the `default_collection` of `type` in
+#   `trigger_object_types.yaml`. Use this when an analysis needs a
+#   filter-specific collection (e.g. a VBF-tagged jet collection for one filter
+#   of a multi-jet trigger, while the rest match the default `JetGood`).
+#
+# Example for a hypothetical NanoAOD v12 analysis combining an all-hadronic
+# multi-jet+HT trigger and an electron-muon cross trigger (both commented out):
+#
+# trigger_object_filters:
+#   12:
+#     # All-hadronic trigger: 4 jets (matched to the default `JetGood`) plus one
+#     # PFHT filter (HT is a global quantity, never matched to offline objects).
+#     HLT_QuadPFJet70_50_40_35_PFBTagParticleNet_2BTagSum0p65:
+#       - "Jet:4:4:35:4PFCentralJetTightIDPt35"
+#       - "Jet:8:3:40:3PFCentralJetTightIDPt40"
+#       - "Jet:21:2:50:2PFCentralJetTightIDPt50"
+#       - "Jet:23:1:70:1PFCentralJetTightIDPt70"
+#       - "Jet:26:2:0.65:BTagCentralJetPt35PFParticleNet2BTagSum0p65"
+#     HLT_PFHT280_QuadPFJet30_PNet2BTagMean0p55:
+#       - "Jet:3:4:30:4PFCentralJetTightIDPt30"
+#       - "HT:5:0:280:PFHT280Jet30"
+#       - "Jet:26:2:0.55:PFCentralJetPt30PNet2BTagMean0p55"
+#     # Electron-muon cross trigger: each leg matched to its own lepton
+#     # collection, set explicitly since `type` here would default to
+#     # `ElectronGood`/`MuonGood` but a different collection is wanted for the
+#     # electron leg in this hypothetical example.
+#     HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL:
+#       - {type: Muon, bit: 3, n_objects: 1, threshold: 12, name: 1mu, collection: MuonGood}
+#       - {type: Electron, bit: 6, n_objects: 1, threshold: 23, name: 1e-1mu, collection: ElectronGoodTight}
+#   15:
+#     # Same physics triggers, re-derived for NanoAOD v15: only the bit indices
+#     # change (see the version's own autoDoc), the structure is identical.
+#     HLT_QuadPFJet70_50_40_35_PFBTagParticleNet_2BTagSum0p65:
+#       - "Jet:34:4:25:4PFCentralJetTightIDPt25"
+#       - "Jet:35:2:0.55:PFCentralJetPt25PNet2BTagMean0p55"
+
+trigger_object_filters: {}
