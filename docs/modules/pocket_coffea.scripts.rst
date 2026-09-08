@@ -21,6 +21,14 @@ pocket\_coffea.scripts.build\_jec module
    :show-inheritance:
    :undoc-members:
 
+pocket\_coffea.scripts.build\_skimmed\_dataset\_definition module
+------------------------------------------------------------------
+
+.. automodule:: pocket_coffea.scripts.build_skimmed_dataset_definition
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 pocket\_coffea.scripts.check\_jobs module
 -----------------------------------------
 

@@ -627,6 +627,22 @@ is applied (`BaseProcessorABC.process`); they therefore include every input chun
 dataset definition produced by `pocket-coffea hadd-skimmed-files` carries the same fields, so a hadded skim is also
 self-recovering.
 
+##### Recovering a missing `skimmed_dataset_definition.json`
+
+`runner` (and `merge-outputs -jc`) write the per-chunk/per-group `output_*.coffea` files to disk as soon as each one
+finishes, but only call `save_skimed_dataset_definition` once at the very end. If the run crashes or is killed before
+that point (e.g. you had to restart the skim), the `output_*.coffea` files are still on disk but
+`skimmed_dataset_definition.json` was never written. Rebuild it without re-running the skim with:
+
+```bash
+pocket-coffea build-skimmed-dataset-definition -p "output_skim_config/output_*.coffea" -o output_skim_config/skimmed_dataset_definition.json
+```
+
+This loads and accumulates the chunk files (same as `merge-outputs`/`accumulate`) and calls
+`save_skimed_dataset_definition` on the result. Pass explicit files instead of `-p/--pattern` if you need to select a
+subset, and `--skip-initial-events-check DATASET` (repeatable) or `--no-check-initial-events` if some input chunks
+were intentionally skipped. Run `pocket-coffea build-skimmed-dataset-definition --help` for all options.
+
 At downstream postprocess time `BaseProcessorABC.postprocess` calls
 `pocket_coffea.utils.skim.apply_skim_sumgenweights_override` which, for every `isSkim` dataset whose metadata carries
 these fields, **replaces** the per-chunk-reconstructed `accumulator["sum_genweights"]` /
