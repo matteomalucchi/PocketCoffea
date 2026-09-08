@@ -251,7 +251,7 @@ def get_trigger_object_matching_mask(events, trigger_filters, object_types, trig
     masks = get_trigger_object_matching_masks(events, trigger_filters, object_types, **kwargs)
     if triggers is not None:
         missing = [trigger for trigger in triggers if trigger not in masks]
-        if len(missing):
+        if len(missing) > 0:
             raise Exception(f"Trigger object filters not configured for {missing}")
         masks = {trigger: masks[trigger] for trigger in triggers}
 
