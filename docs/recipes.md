@@ -1281,6 +1281,251 @@ When merging the collections like this, make sure to set the `sort_by_pt` option
 :::
 
 
+### Trigger scale factors
+
+The efficiency of a trigger path is often measured by factorizing it in the efficiency of each of the filters composing
+the path (plus the efficiency of the logical OR of the L1 seeds), each of them measured as a function of a different
+observable (the pt of the N-th leading jet, the HT, the b-tagging score...). The total efficiency is the product of the
+per-filter efficiencies and therefore the total scale factor is the product of the per-filter data/MC efficiency ratios
+
+$$ SF = \frac{\prod_i \epsilon^{data}_i(x_i)}{\prod_i \epsilon^{MC}_i(x_i)} = \prod_i SF_i(x_i) $$
+
+where $x_i$ is the observable used to measure the efficiency of the *i*-th filter. The `up` and `down` variations are
+obtained by shifting **coherently** all the filters by the error of the efficiency
+
+$$ SF^{up} = \prod_i \frac{\epsilon^{data}_i(x_i) + \sigma_i}{\epsilon^{MC}_i(x_i) + \sigma_i}, \qquad
+   SF^{down} = \prod_i \frac{\epsilon^{data}_i(x_i) - \sigma_i}{\epsilon^{MC}_i(x_i) - \sigma_i} $$
+
+N.B: since the same error is added to the numerator and to the denominator, the `up` variation of the scale factor is
+*not* necessarily larger than the `down` one: they are the variations of the efficiencies, not of their ratio.
+
+The scale factors are applied with the **sf_trigger** weight, implemented in
+[`pocket_coffea.lib.trigger_sf`](pocket_coffea.lib.trigger_sf).
+
+#### 1. Convert the efficiency curves to a correctionlib file
+
+The efficiencies are usually provided as ROOT files containing, for each filter, the efficiency curve and the 68%
+confidence intervals of the fit, both for data and for simulation:
+
+```
+<Data/Simulation>__Efficiency_<filter>              # the efficiency curve (TGraphAsymmErrors or TH1)
+<Data/Simulation>__Efficiency_<filter>_FitFunction  # not used
+<Data/Simulation>__Efficiency_<filter>_FitResult    # not used
+<Data/Simulation>__ConfidenceIntervals_<filter>     # the error of the efficiency (TGraphErrors)
+```
+
+The objects can be at the top level of the file or inside a `TDirectory` named after the trigger (the directory of the
+trigger the filter belongs to is used automatically, and `--directory` selects one explicitly). The name of the L1
+objects usually ends with the era (e.g. `Efficiency_L1All_preEE`), selected with `--era`.
+
+The `convert_trigger_sf_to_correctionlib.py` script
+([AnalysisConfigs](https://github.com/PocketCoffea/AnalysisConfigs)) reads the curves with `uproot`, converts them to
+binned histograms and writes one correctionlib correction per filter. `-i` must point at the files of **a single era**
+(see the warning below) — a real-world example, converting the 2022 postEE trigger of the HH4b analysis from files
+staged on a Tier-3 storage element:
+
+```bash
+python scripts/convert_trigger_sf_to_correctionlib.py \
+    -i /pnfs/psi.ch/cms/trivcat/store/user/mmalucch/HH4b/trgSFs_2022_to_2025/2022_postEE \
+    -y 2022_postEE -o /pnfs/psi.ch/cms/trivcat/store/user/mmalucch/HH4b/trgSFs_2022_to_2025/2022_postEE/trigger_sf_2022_postEE.json.gz \
+    --dump-params configs/HH4b_common/params/trigger_sf_2022_postEE.yaml --era postEE
+```
+
+`--inspect` (no `-y`/`-o` needed) lists the content of the input files to check the naming of the objects before
+converting:
+
+```bash
+python scripts/convert_trigger_sf_to_correctionlib.py \
+    -i /pnfs/psi.ch/cms/trivcat/store/user/mmalucch/HH4b/trgSFs_2022_to_2025/2022_postEE --inspect
+```
+
+:::{warning}
+The HLT filters of a trigger are usually measured **separately per era**, but the era does not appear anywhere in the
+path of the objects (unlike the L1 efficiency, whose object name carries an explicit era suffix, see below). If `-i`
+is pointed at a folder containing the HLT files of *more than one era for the same trigger*, the converter raises an
+error rather than silently keeping only one era's numbers — always restrict `-i` to a single era's file(s), as in the
+example above, and run the conversion once per era.
+:::
+
+The list of the filters of each trigger is read from the yaml file with the trigger object filters
+(`--filters-file`, see the trigger object matching below) or given explicitly with `--filters`. The script assigns to
+each filter the observable used to evaluate its efficiency and dumps the corresponding PocketCoffea parameters with
+`--dump-params`.
+
+The observable is assigned from the name of the filter, so it is cross-checked against the title of the x axis of the
+efficiency curve, which documents the observable actually used in the measurement. Both are printed while converting
+and an inconsistency is reported:
+
+```
+  4PFCentralJetTightIDPt35  [HLT_QuadPFJet70_...] -> jet_pt (index 4)  [x axis: Offline p_{T}^{4th jet} [GeV]]
+      data: Data__Efficiency_4PFCentralJetTightIDPt35 + Data__ConfidenceIntervals_4PFCentralJetTightIDPt35
+      mc  : Simulation__Efficiency_4PFCentralJetTightIDPt35 + Simulation__ConfidenceIntervals_4PFCentralJetTightIDPt35
+```
+
+Each correction takes as input the `systematic` (`nominal`, `up`, `down`) and the value of the observable, and is built
+with `flow="clamp"`, so that the events outside the range of the measurement get the scale factor of the first (last)
+bin. The data and MC efficiencies are stored in the same file (`eff_data_<filter>`, `eff_mc_<filter>`) for checks.
+
+#### 2. Configure the parameters
+
+The correctionlib file and the list of the corrections to be applied, with the observable used to evaluate each of them,
+are configured in the `trigger_scale_factors` key of the parameters (this is the file dumped by the conversion script):
+
+```yaml
+trigger_scale_factors:
+  "2022_postEE":
+    file: /path/to/trigger_sf_2022_postEE.json.gz
+    corrections:
+      # efficiency of the OR of the L1 seeds, evaluated with the Calo-HT
+      - name: sf_L1All
+        variable:
+          name: calojet_ht
+          collection: Jet
+      # HLT filters, evaluated with the pt of the N-th leading in pt jet
+      - name: sf_4PFCentralJetTightIDPt35
+        variable:
+          name: jet_pt
+          collection: JetGood
+          index: 4
+      # b-tagging filter, evaluated with the atanh of the average b-tagging score
+      # of the 2 leading in b-tagging score jets
+      - name: sf_BTagCentralJetPt35PFParticleNet2BTagSum0p65
+        variable:
+          name: atanh_btag_mean
+          collection: JetGood
+          field: btagPNetB
+          n: 2
+```
+
+The available observables are the functions registered in `pocket_coffea.lib.trigger_sf.trigger_sf_variables`:
+
+| Observable | Description | Options |
+| --- | --- | --- |
+| `jet_pt` | pt of the `index`-th leading in pt jet | `collection` (`JetGood`), `index` (1), `pad_value` (0.) |
+| `alljet_ht` | scalar sum of the pt of all the jets in the acceptance | `collection` (`Jet`), `pt` (30.), `eta` (2.5) |
+| `calojet_ht` | as `alljet_ht`, excluding the jets identified as muons | as `alljet_ht` plus `muon_collection` (`Muon`), `muon_iso_field` (`pfRelIso04_all`), `muon_iso` (0.15), `muon_dr` (0.4), `muEF` (0.5), `chEmEF` (0.5), `neEmEF` (0.8) |
+| `atanh_btag_mean` | atanh of the average b-tagging score of the `n` leading in b-tagging score jets | `collection` (`JetGood`), `field` (`btagPNetB`), `n` (2) |
+
+:::{tip}
+The jets are always explicitly sorted by the relevant quantity, so the observables are correct also if the collection is
+sorted differently by the analysis (e.g. by b-tagging score).
+:::
+
+A custom observable can be added by the user in the configuration folder with the `register_trigger_sf_variable`
+decorator (remember to register the module with `cloudpickle` to make it available to the workers):
+
+```python
+from pocket_coffea.lib.trigger_sf import register_trigger_sf_variable
+
+@register_trigger_sf_variable("my_variable")
+def my_variable(events, cfg):
+    # cfg contains the configuration of the observable in the parameters
+    return events[cfg.get("collection", "JetGood")].pt[:, 0]
+```
+
+#### 3. Apply the weight
+
+The `sf_trigger` weight is part of the common weights of the framework: it is enough to add it to the weights
+configuration of the `Configurator`:
+
+```python
+cfg = Configurator(
+    parameters=parameters,   # including the trigger_scale_factors key
+    weights_classes=common_weights,
+    weights={
+        "common": {
+            "inclusive": ["genWeight", "lumi", "XS", "sf_trigger"],
+            "bycategory": {},
+        },
+    },
+    variations={
+        "weights": {
+            "common": {"inclusive": ["sf_trigger"], "bycategory": {}},
+        },
+    },
+    ...
+)
+```
+
+The weight is applied only to MC and the `sf_triggerUp`/`sf_triggerDown` variations are available if `sf_trigger` is
+added to the `variations` configuration.
+
+#### 4. Trigger object matching
+
+Since the efficiencies are derived filter-by-filter, the events are also required to have the offline objects matched to
+the trigger objects firing each of the filters. The matching is implemented by the `get_trigger_object_matching` cut and
+is generic over **any** type of trigger object (jets, leptons, taus, photons, or event-level quantities like HT) and
+**any** offline collection: both are resolved per filter, so the same mechanism covers a jets-only trigger and a
+multi-object cross trigger (e.g. an electron-muon trigger) without any change to the code.
+
+:::{warning}
+The meaning of the bits of `TrigObj_filterBits` is **not** consistent between NanoAOD versions (nor, generally, across
+data-taking eras sharing the same version): always check the NanoAOD self-documentation of the version used in the
+analysis at [cms-xpog](https://cms-xpog.docs.cern.ch/autoDoc/). Because of this, the filters are configured **per
+NanoAOD version**, not per year: `get_trigger_object_matching` resolves the version of the chunk being processed with
+[`pocket_coffea.utils.utils.get_nano_version`](pocket_coffea.utils.utils.get_nano_version) (the same mechanism used
+elsewhere in the framework, e.g. for the jet calibration) and looks up the corresponding block of
+`trigger_object_filters`. Years sharing the same NanoAOD version (e.g. 2022 and 2023, both on v12) share the same block.
+:::
+
+Two parameters work together to configure the matching, both merged in the default parameters (empty by default, an
+analysis fills them in) — see `parameters/trigger_object_types.yaml` and `parameters/trigger_object_filters.yaml` in the
+package for the full, commented template:
+
+- **`trigger_object_types`**: a small, essentially version-independent registry translating the *type* of a trigger
+  object (the value of `TrigObj.id`) to a symbolic name, used to configure filters by name instead of by a numeric id.
+  For each type it also declares whether it is matched to an offline collection at all (event-level quantities like
+  `HT`, `MHT`, `MET` are not: firing the filter is by itself the requirement) and, if so, which offline collection is
+  used by default:
+
+  ```yaml
+  trigger_object_types:
+    Jet: {id: 1, matchable: true, default_collection: JetGood}
+    HT: {id: 3, matchable: false, default_collection: null}
+    Electron: {id: 11, matchable: true, default_collection: ElectronGood}
+    Muon: {id: 13, matchable: true, default_collection: MuonGood}
+    # ... MET, MHT, FatJet, Tau, Photon, BoostedTau, or any project-specific type
+  ```
+
+- **`trigger_object_filters`**: keyed by NanoAOD version, `{trigger: [filters]}`. Each filter is either the compact
+  string `"type:bit:n_objects:threshold:name"` (optionally with a 6th `:collection` field), or, when `name` or
+  `collection` need a character the compact string cannot represent, an equivalent mapping:
+
+  ```yaml
+  trigger_object_filters:
+    12:
+      HLT_QuadPFJet70_50_40_35_PFBTagParticleNet_2BTagSum0p65:
+        - "Jet:0:4:20:4PixelOnlyPFCentralJetTightIDPt20"
+        - "Jet:4:4:35:4PFCentralJetTightIDPt35"
+        - "Jet:26:2:0.65:BTagCentralJetPt35PFParticleNet2BTagSum0p65"
+      HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL:
+        - {type: Muon, bit: 3, n_objects: 1, threshold: 12, name: 1mu}
+        - {type: Electron, bit: 6, n_objects: 1, threshold: 23, name: 1e-1mu}
+  ```
+
+  - `type`: symbolic name of the trigger object, a key of `trigger_object_types`;
+  - `bit`: index of the bit of `TrigObj_filterBits` corresponding to the filter, for this NanoAOD version;
+  - `n_objects`: number of objects required to pass the filter (ignored for non-matchable types);
+  - `threshold`: online threshold of the filter (only for bookkeeping);
+  - `name`: name of the filter, the same used to name the efficiency curves;
+  - `collection` (optional): offline collection to match this filter against, overriding the `default_collection` of
+    `type` — use it when one filter of a trigger needs a different collection than the rest (e.g. a VBF-tagged jet
+    collection for one filter of an otherwise `JetGood`-matched multi-jet trigger).
+
+```python
+from pocket_coffea.lib.cut_functions import get_trigger_object_matching
+
+cfg = Configurator(
+    preselections=[..., get_trigger_object_matching(dr_max=0.5)],
+    ...
+)
+```
+
+An event passes the cut if, for at least one of the triggers, all its filters are matched: for each filter, the number
+of trigger objects passing the filter bit and matched (by deltaR, within `dr_max`) to an object of the resolved
+collection must be at least `n_objects`. Filters of a non-matchable type (`HT`, `MHT`, `MET` by default) are not matched
+to any offline object: a single trigger object passing the filter bit is enough, regardless of `n_objects`.
+
 ## Create a custom executor to use `onnxruntime`
 
 This example shows running on CERN lxplus and assumes a prior understanding of how to load and use an ML model with onnxruntime. For more examples see the executors in the ttHbb analysis [here](https://github.com/PocketCoffea/AnalysisConfigs/tree/main/configs/ttHbb/semileptonic/common/executors)

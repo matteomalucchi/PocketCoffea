@@ -84,6 +84,8 @@ def get_default_parameters(group_tags: dict = None) -> OmegaConf:
     - jet_scale_factors: btagSF, jetPuID
     - btagging
     - lepton_scale_factors
+    - trigger_scale_factors
+    - trigger_object_types, trigger_object_filters
     - MET_xy corrections.
 
     The use can use this function to get a basic set of parameters to customize
@@ -107,6 +109,15 @@ def get_default_parameters(group_tags: dict = None) -> OmegaConf:
         os.path.join(basedir, 'lepton_scale_factors.yaml')
     )
     photon_sf = OmegaConf.load(os.path.join(basedir, 'photon_scale_factors.yaml'))
+    trigger_scale_factors = OmegaConf.load(
+        os.path.join(basedir, 'trigger_scale_factors.yaml')
+    )
+    trigger_object_types = OmegaConf.load(
+        os.path.join(basedir, 'trigger_object_types.yaml')
+    )
+    trigger_object_filters = OmegaConf.load(
+        os.path.join(basedir, 'trigger_object_filters.yaml')
+    )
     met_xy = OmegaConf.load(os.path.join(basedir, "met_xy.yaml"))
     syst_variations = OmegaConf.load(os.path.join(basedir, 'variations.yaml'))
     plotting_style = OmegaConf.load(os.path.join(basedir, 'plotting_style.yaml'))
@@ -122,6 +133,9 @@ def get_default_parameters(group_tags: dict = None) -> OmegaConf:
         btagging,
         lepton_scale_factors,
         photon_sf,
+        trigger_scale_factors,
+        trigger_object_types,
+        trigger_object_filters,
         met_xy,
         syst_variations,
         plotting_style
