@@ -103,8 +103,8 @@ default_parameters = defaults.get_default_parameters(
 default_parameters.keys()
 # dict_keys(['pileupJSONfiles', 'event_flags', 'event_flags_data',
 #            'lumi', 'default_jets_calibration', 'jets_calibration',
-#            'jet_scale_factors', 'btagging', 'lepton_scale_factors',
-#            'systematic_variations'])
+#            'jet_scale_factors', 'forward_jet_mitigation', 'btagging',
+#            'lepton_scale_factors', 'systematic_variations'])
 
 default_parameters.jet_scale_factors.btagSF
 # {
@@ -126,6 +126,13 @@ default_parameters.jet_scale_factors.btagSF
 
 The `OmegaConf` parameters object behaves like a python dictionary, where keys can be accessed directly as attributes. 
 The user can explore programmatically the full parameters set and dinamycally add more keys. 
+
+:::{note}
+The `forward_jet_mitigation` key gathers the mitigations of the Run 3 forward jet
+mis-calibration: the veto of the soft forward-endcap jets and the removal of the JER
+smearing and of the L2L3Residual correction in a configurable `|eta|` window. They are
+all disabled in the defaults, see [Forward jet mitigation](./forward_jet_mitigation.md).
+:::
 
 
 Parameters set can also be loaded directly from yaml files:
