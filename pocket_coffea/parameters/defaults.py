@@ -101,6 +101,7 @@ def get_default_parameters(group_tags: dict = None) -> OmegaConf:
     #xsec = OmegaConf.load(os.path.join(basedir, 'xsec.yaml'))
     jet_calibration = OmegaConf.load(os.path.join(basedir, "jets_calibration.yaml"))
     jet_scale_factors = OmegaConf.load(os.path.join(basedir, 'jet_scale_factors.yaml'))
+    forward_jet_mitigation = OmegaConf.load(os.path.join(basedir, 'forward_jet_mitigation.yaml'))
     met_calibration = OmegaConf.load(os.path.join(basedir, "met_calibration.yaml"))
     btagging = OmegaConf.load(os.path.join(basedir, "btagging.yaml"))
     lepton_scale_factors = OmegaConf.load(
@@ -118,6 +119,7 @@ def get_default_parameters(group_tags: dict = None) -> OmegaConf:
         lumi,
         jet_calibration,
         jet_scale_factors,
+        forward_jet_mitigation,
         met_calibration,
         btagging,
         lepton_scale_factors,

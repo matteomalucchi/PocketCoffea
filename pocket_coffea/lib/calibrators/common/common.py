@@ -121,6 +121,8 @@ class JetsCalibrator(Calibrator):
                 nano_version=nano_aod_version,
                 jec_syst=self.do_variations,
                 apply_jer=self.jet_calib_param.apply_jer_MC[self.year][jet_type_alias] if self.isMC else False,
+                # needed to look up the forward_jet_mitigation block, off by default
+                params=self.params,
             )
             # update the rawFactor of the corrected jets
             #print(f"Calibrating jet collection {jet_coll_name} with jet type {jet_type} and alias {jet_type_alias}. " + f"Year: {self._year}")

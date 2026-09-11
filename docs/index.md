@@ -23,6 +23,7 @@ analysis phase space and metadata from CMS groups, and an analysis's run configu
 - If you want a broader introduction to the components of PocketCoffea have a look at [Concepts](./concepts.md).
 - Looking for the configuration manual? [Configuration](./configuration.md)
 - **New**: Learn about object calibrations and systematic variations: [Calibrators](./calibrators.md)
+- Mitigating the forward jet mis-calibration of Run 3: [Forward jet mitigation](./forward_jet_mitigation.md)
 :::
 
 ```{toctree}
@@ -34,6 +35,7 @@ running.md
 analysis_example.md
 configuration.md
 calibrators.md
+forward_jet_mitigation.md
 plots.md
 cutflow_plots.md
 statistical_analysis.md

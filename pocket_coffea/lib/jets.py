@@ -10,6 +10,123 @@ from correctionlib.schemav2 import Correction, CorrectionSet
 from ..utils.utils import get_nano_version, replace_at_indices
 
 
+FORWARD_JET_MITIGATION_KEY = "forward_jet_mitigation"
+
+
+def get_forward_jet_mitigation(params, block, year, enabled=None):
+    """
+    Resolve one block of the `forward_jet_mitigation` parameters for a data-taking period.
+
+    The mitigations of the forward jet mis-calibration are configured in
+    `pocket_coffea/parameters/forward_jet_mitigation.yaml` and are all disabled by
+    default. Each block carries the defaults for every period plus a `by_year`
+    mapping overriding any of its keys, `enabled` included, for a single period.
+
+    Args:
+        params: the full parameters object (OmegaConf or plain dict)
+        block: the mitigation block to resolve, e.g. "jet_veto"
+        year: the data-taking period
+        enabled: overrides the `enabled` key of the resolved block for this call only.
+            `None` (the default) follows the parameters.
+
+    Returns:
+        A plain dict with the resolved keys of the block, or `None` when the
+        mitigation is not active for this period.
+    """
+    root = params.get(FORWARD_JET_MITIGATION_KEY, None) if params is not None else None
+    cfg = root.get(block, None) if root is not None else None
+    if cfg is None:
+        if enabled:
+            raise ValueError(
+                f"The '{FORWARD_JET_MITIGATION_KEY}.{block}' mitigation has been requested "
+                "but it is missing from the parameters: make sure the default PocketCoffea "
+                "parameters are loaded, or define the block in your own parameter files."
+            )
+        return None
+    resolved = {key: value for key, value in cfg.items() if key != "by_year"}
+    by_year = cfg.get("by_year", None) or {}
+    if year in by_year:
+        resolved.update(dict(by_year[year]))
+    if enabled is None:
+        enabled = resolved.get("enabled", False)
+    return resolved if enabled else None
+
+
+def eta_window_mask(eta, cfg):
+    """Boolean mask selecting the jets inside the |eta| window of a mitigation block."""
+    abs_eta = np.abs(eta)
+    return (abs_eta >= cfg["eta_min"]) & (abs_eta < cfg["eta_max"])
+
+
+def forward_jet_veto_mask(jets, params, year, pt=None, enabled=None):
+    """
+    Mask rejecting the low-pT jets of the forward endcap.
+
+    The jet energy response of the forward endcap degrades with the accumulated
+    radiation dose, so jets reconstructed there below a pT threshold are vetoed.
+    The window and the threshold come from the `forward_jet_mitigation.jet_veto`
+    parameters, which are disabled by default.
+
+    Args:
+        jets: the jet collection to filter
+        params: the full parameters object
+        year: the data-taking period
+        pt: the pT to cut on, defaulting to `jets.pt`. Analyses calibrating an
+            alternative pT (e.g. a regressed one) pass it here.
+        enabled: overrides the parameters for this call only, see
+            `get_forward_jet_mitigation`.
+
+    Returns:
+        A boolean mask with the layout of `jets`, or `True` when the veto is not
+        active for this period, so that it can always be combined with `&`.
+    """
+    cfg = get_forward_jet_mitigation(params, "jet_veto", year, enabled=enabled)
+    if cfg is None:
+        return True
+    jet_pt = jets.pt if pt is None else pt
+    return ~(eta_window_mask(jets.eta, cfg) & (jet_pt < cfg["pt_min"]))
+
+
+def remove_residual_correction(cset, jec_tag, jet_type, eta, pt_raw, jes_factor, cfg):
+    """
+    Divide the L2L3Residual factor out of the total JES factor inside an |eta| window.
+
+    The HF region is undercorrected in some periods, so the residual correction
+    derived there cannot be trusted and is undone rather than applied. The compound
+    L1L2L3Res correction applies the residual last, on the pT after L1L2L3: that pT
+    is recovered by dividing the corrected pT by the residual factor itself, which
+    is therefore evaluated with a fixed-point iteration. Two iterations are enough,
+    as the residual depends only weakly on pT.
+
+    Args:
+        cset: the correctionlib correction set of the JERC file
+        jec_tag: the JEC tag of the period, e.g. `Summer22_22Sep2023_V4_DATA`
+        jet_type: the jet type key, e.g. `AK4PFPuppi`
+        eta: the (flat) jet eta
+        pt_raw: the (flat) raw jet pT
+        jes_factor: the total JES factor, already including the residual
+        cfg: the resolved `forward_jet_mitigation.skip_residual` block
+
+    Returns:
+        The JES factor with the residual removed inside the window, untouched outside.
+    """
+    tag = f"{jec_tag}_L2L3Residual_{jet_type}"
+    if tag not in list(cset.keys()):
+        raise Exception(
+            f"[forward jet mitigation] The JERC file does not provide the standalone "
+            f"L2L3Residual correction '{tag}', so 'forward_jet_mitigation.skip_residual' "
+            "cannot be applied."
+        )
+    corr = cset[tag]
+    pt_corrected = jes_factor * pt_raw
+    pt_no_residual = pt_corrected
+    for _ in range(2):
+        eval_dict = {"JetEta": eta, "JetPt": pt_no_residual}
+        residual = corr.evaluate(*[eval_dict[i.name] for i in corr.inputs])
+        pt_no_residual = pt_corrected / residual
+    return np.where(eta_window_mask(eta, cfg), jes_factor / residual, jes_factor)
+
+
 def get_rho(events, nano_version):
     if nano_version >= 12:
         return events.Rho.fixedGridRhoFastjetAll
@@ -95,7 +212,16 @@ def met_xy_correction(params, events, METcol,  year, era):
     return pt_corr, phi_corr
 
 
-def jet_selection(events, jet_type, params, year, leptons_collection="", jet_tagger=""):
+def jet_selection(events, jet_type, params, year, leptons_collection="", jet_tagger="",
+                  forward_jet_veto=None):
+    """
+    Select the good jets of a collection according to the `object_preselection` parameters.
+
+    Args:
+        forward_jet_veto: controls the veto of the low-pT forward-endcap jets. `None`,
+            the default, follows the `forward_jet_mitigation.jet_veto` parameters, which
+            are disabled by default; `True`/`False` force the veto on/off for this call.
+    """
     jets = events[jet_type]
     cuts = params.object_preselection[jet_type]
 
@@ -109,6 +235,8 @@ def jet_selection(events, jet_type, params, year, leptons_collection="", jet_tag
         (jets.pt > cuts["pt"])
         & (np.abs(jets.eta) < cuts["eta"])
         & (jets.jetId_corrected >= cuts["jetId"])
+        # Veto of the low-pT forward-endcap jets, inactive unless enabled in the parameters
+        & forward_jet_veto_mask(jets, params, year, enabled=forward_jet_veto)
     )
     # Lepton cleaning
     # Only jets that are more distant than dr to ALL leptons are tagged as good jets
@@ -693,7 +821,15 @@ def jet_correction_corrlib(
     nano_version,
     apply_jer=True,
     jec_syst=True,
-):    
+    params=None,
+):
+    """
+    Apply the JEC, the JER smearing and their variations to a jet collection.
+
+    Args:
+        params: the full parameters object, used to look up the
+            `forward_jet_mitigation` block. When `None` no mitigation is applied.
+    """
     isMC = chunk_metadata["isMC"]
     year = chunk_metadata["year"]
     era = chunk_metadata["era"]
@@ -750,6 +886,13 @@ def jet_correction_corrlib(
     
     # flatten
     jets = ak.flatten(jets_jagged)
+
+    # Mitigation of the forward jet mis-calibration: both blocks are inactive unless
+    # they are enabled in the parameters for this data-taking period, and they only
+    # touch the jets inside their own |eta| window.
+    skip_residual_cfg = get_forward_jet_mitigation(params, "skip_residual", year)
+    skip_jer_cfg = get_forward_jet_mitigation(params, "skip_jer", year)
+
     # evaluate dictionary
     eval_dict = {
         "JetPt": jets.pt_raw,
@@ -773,6 +916,12 @@ def jet_correction_corrlib(
             raise Exception(f"[No JEC correction: {tag_jec} - Year: {year} - Era: {era} - Level: {level}")
         inputs = [eval_dict[input.name] for input in sf.inputs]
         sf_value = sf.evaluate(*inputs)
+        # Undo the L2L3Residual correction where it is known to be unreliable.
+        # Only data carries residuals, so MC is left untouched.
+        if skip_residual_cfg is not None and not isMC and "Res" in level:
+            sf_value = remove_residual_correction(
+                cset, jec_tag, jet_type, jets.eta, jets.pt_raw, sf_value, skip_residual_cfg
+            )
         # update the nominal pt and mass
         jets["pt"] = sf_value * jets["pt_raw"]
         jets["mass"] = sf_value * jets["mass_raw"]
@@ -816,19 +965,29 @@ def jet_correction_corrlib(
         if apply_jer:
             if jer_syst:
                 jersmear, jersmear_up, jersmear_down = get_jersmear_SFunc(eval_dict, ceval_jer, jer_sf_tag, syst_tag=jer_sfunc_tag)
-                # jer nominal
-                jets["pt_jer"] = jets.pt * jersmear
-                jets["mass_jer"] = jets.mass * jersmear
+            else:
+                jersmear = get_jersmear_SFunc(eval_dict, ceval_jer, jer_sf_tag)
+
+            # Leave the jets of the configured |eta| window unsmeared, nominal and
+            # variations alike, where the JER cannot be trusted.
+            if skip_jer_cfg is not None:
+                in_window = eta_window_mask(jets.eta, skip_jer_cfg)
+                jersmear = np.where(in_window, 1.0, jersmear)
+                if jer_syst:
+                    jersmear_up = np.where(in_window, 1.0, jersmear_up)
+                    jersmear_down = np.where(in_window, 1.0, jersmear_down)
+
+            # jer nominal
+            jets["pt_jer"] = jets.pt * jersmear
+            jets["mass_jer"] = jets.mass * jersmear
+            if jer_syst:
                 # jer up
                 jets["pt_JER_up"] = jets.pt * jersmear_up
                 jets["mass_JER_up"] = jets.mass * jersmear_up
                 # jer down
                 jets["pt_JER_down"] = jets.pt * jersmear_down
                 jets["mass_JER_down"] = jets.mass * jersmear_down
-            else: 
-                jersmear = get_jersmear_SFunc(eval_dict, ceval_jer, jer_sf_tag)
-                jets["pt_jer"] = jets.pt * jersmear
-                jets["mass_jer"] = jets.mass * jersmear
+
             
             # to avoid the sf: jer*jer_up or jer*jer_down, update the jer pt/mass after calculation of the jer up/down
             jets["pt"] = jets["pt_jer"]

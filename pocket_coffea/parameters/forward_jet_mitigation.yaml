@@ -1,0 +1,63 @@
+# Mitigation of the known mis-calibration of forward jets in Run 3.
+#
+# Two distinct effects are covered (see docs/forward_jet_mitigation.md):
+#
+#   * the jet energy response in the forward endcap (2.5 < |eta| < 3.0) degrades
+#     with the accumulated radiation dose, so low-pT jets reconstructed there are
+#     not reliable and are best removed from the analysis;
+#
+#   * the HF region (3.0 < |eta| < 5.0) is undercorrected in 2022-2023 because of
+#     radiation damage in the forward calorimeter, so both the L2L3Residual
+#     correction and the JER smearing derived there can be unreliable.
+#
+# Every block below is OFF by default: an analysis opts in explicitly from its own
+# parameter files, and nothing changes for analyses that ignore this file.
+#
+# All blocks share the same keys:
+#
+#   enabled          master switch for the mitigation
+#   eta_min/eta_max  the |eta| window the mitigation acts on ([eta_min, eta_max))
+#   by_year          per data-taking period overrides of any key above, `enabled`
+#                    included, so a mitigation can be turned on for a subset of
+#                    the periods only, with a different window per period
+#
+# Example: veto forward-endcap jets everywhere, but drop the JER smearing in the
+# HF region for the 2022 periods only.
+#
+#   forward_jet_mitigation:
+#     jet_veto:
+#       enabled: true
+#     skip_jer:
+#       eta_min: 3.0
+#       by_year:
+#         2022_preEE: {enabled: true}
+#         2022_postEE: {enabled: true}
+
+forward_jet_mitigation:
+
+  # Object-level veto: reject jets with pt < pt_min inside the |eta| window.
+  # Applied by `pocket_coffea.lib.jets.jet_selection`.
+  jet_veto:
+    enabled: false
+    eta_min: 2.5
+    eta_max: 3.0
+    pt_min: 50.
+    by_year: {}
+
+  # Calibration-level: do not smear the jets inside the |eta| window with the JER
+  # (MC only). The JER variations of those jets are dropped along with the
+  # nominal smearing, so the jets stay at their JES-corrected pT.
+  skip_jer:
+    enabled: false
+    eta_min: 2.5
+    eta_max: 5.191
+    by_year: {}
+
+  # Calibration-level: divide the L2L3Residual factor out of the total JES
+  # correction inside the |eta| window (data only). Requires the JERC file to
+  # expose the standalone `<jec_tag>_L2L3Residual_<jet_type>` correction.
+  skip_residual:
+    enabled: false
+    eta_min: 3.0
+    eta_max: 5.191
+    by_year: {}
