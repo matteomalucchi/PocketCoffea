@@ -1,0 +1,69 @@
+# Registry mapping the "type" of a NanoAOD trigger object (the value stored in the
+# `TrigObj_id` branch) to a symbolic name, used to configure the trigger filters of
+# `trigger_object_filters.yaml` by name instead of by the raw numeric id.
+#
+# This mapping only translates *what kind of object* a `TrigObj.id` value refers
+# to: it is effectively stable across NanoAOD versions, unlike the *meaning of the
+# individual bits* of `TrigObj_filterBits`, which changes every campaign and is
+# instead configured, per NanoAOD version, in `trigger_object_filters.yaml` (see
+# the "Trigger scale factors" recipe of the documentation and
+# `pocket_coffea.lib.triggers.get_trigger_object_matching_masks`).
+#
+# For each type:
+# - `id`: value of `TrigObj.id` identifying this object type.
+# - `matchable`: whether this type of trigger object should be matched to an
+#   offline object collection by deltaR. Global, event-level quantities (HT, MHT,
+#   MET) are not per-object and are not matched: firing the filter is by itself
+#   the requirement, regardless of the `n_objects` configured for the filter.
+# - `default_collection`: offline collection matched to a filter of this type when
+#   the filter does not specify its own `collection` (see `trigger_object_filters.yaml`).
+#   Ignored for non-matchable types.
+#
+# A new object type (or a project-specific default collection, e.g. a differently
+# named jet collection) can be added or overridden by an analysis exactly like any
+# other parameter, e.g. `merge_parameters_from_string(params, ["trigger_object_types.Jet.default_collection='JetGoodVBF'"])`.
+trigger_object_types:
+  Jet:
+    id: 1
+    matchable: true
+    default_collection: JetGood
+  MET:
+    id: 2
+    matchable: false
+    default_collection: null
+  HT:
+    id: 3
+    matchable: false
+    default_collection: null
+  MHT:
+    id: 4
+    matchable: false
+    default_collection: null
+  FatJet:
+    id: 6
+    matchable: true
+    default_collection: FatJetGood
+  Electron:
+    id: 11
+    matchable: true
+    default_collection: ElectronGood
+  Muon:
+    id: 13
+    matchable: true
+    default_collection: MuonGood
+  Tau:
+    id: 15
+    matchable: true
+    default_collection: TauGood
+  Photon:
+    id: 22
+    matchable: true
+    default_collection: PhotonGood
+  BoostedTau:
+    # Introduced in NanoAODv12: absent from NanoAODv9, where no TrigObj ever has
+    # this id, so a v9 `trigger_object_filters` block referencing this type would
+    # silently match zero objects rather than error (the id itself never appears,
+    # as opposed to appearing with the wrong bit set).
+    id: 1515
+    matchable: true
+    default_collection: TauGood
