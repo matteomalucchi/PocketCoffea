@@ -6,13 +6,30 @@ import pytest
 
 from pocket_coffea.lib.trigger_sf import (
     get_trigger_sf_variable,
+    register_trigger_sf_variable,
     sf_trigger,
-    trigger_sf_variables,
 )
 from pocket_coffea.lib.triggers import (
     get_trigger_object_matching_mask,
     get_trigger_object_matching_masks,
 )
+
+
+# Trigger scale factor observables are analysis-specific (e.g. the jet-trigger
+# ones used by the HH4b analysis live in AnalysisConfigs, registered with
+# `register_trigger_sf_variable`): these tests only exercise the generic
+# registration/application machinery with a couple of minimal, self-contained
+# observables, not shipped with PocketCoffea itself.
+@register_trigger_sf_variable("_test_n_jets")
+def _test_n_jets(events, cfg):
+    return ak.num(events[cfg.get("collection", "JetGood")], axis=1)
+
+
+@register_trigger_sf_variable("_test_leading_jet_pt")
+def _test_leading_jet_pt(events, cfg):
+    return ak.fill_none(
+        ak.firsts(events[cfg.get("collection", "JetGood")].pt), 0.0
+    )
 
 
 def build_correction(name, variable, edges, content):
@@ -52,18 +69,18 @@ def correction_file(tmp_path_factory):
         schema_version=2,
         corrections=[
             build_correction(
-                "sf_L1All",
-                "calojet_ht",
-                [0.0, 100.0, 200.0, 300.0],
+                "sf_A",
+                "_test_n_jets",
+                [0.0, 3.0, 5.0],
                 {
-                    "nominal": [0.5, 0.9, 1.0],
-                    "up": [0.6, 0.95, 1.1],
-                    "down": [0.4, 0.85, 0.9],
+                    "nominal": [0.5, 0.9],
+                    "up": [0.6, 0.95],
+                    "down": [0.4, 0.85],
                 },
             ),
             build_correction(
-                "sf_1PFCentralJetTightIDPt70",
-                "jet_pt",
+                "sf_B",
+                "_test_leading_jet_pt",
                 [0.0, 50.0, 100.0],
                 {
                     "nominal": [0.8, 1.0],
@@ -80,26 +97,12 @@ def correction_file(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def events():
-    '''Synthetic events with jets, muons and trigger objects'''
+    '''Synthetic events with jets and trigger objects'''
     jets = ak.zip(
         {
-            # the collection is sorted by b-tagging score, not by pt
-            "pt": [[40.0, 120.0, 35.0, 25.0], [80.0, 60.0], [200.0, 10.0]],
+            "pt": [[120.0, 40.0, 35.0, 25.0], [80.0, 60.0], [200.0, 10.0]],
             "eta": [[0.0, 1.0, -1.0, 3.0], [0.0, 0.5], [0.0, 0.0]],
             "phi": [[0.0, 1.0, 2.0, 3.0], [0.0, 1.0], [0.0, 3.0]],
-            "muEF": [[0.0, 0.0, 0.9, 0.0], [0.0, 0.0], [0.0, 0.0]],
-            "chEmEF": [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
-            "neEmEF": [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
-            "btagPNetB": [[0.9, 0.8, 0.5, 0.1], [0.99, 0.01], [0.5, 0.5]],
-        }
-    )
-    muons = ak.zip(
-        {
-            # the first muon overlaps with the first jet of the first event
-            "pt": [[30.0], [], []],
-            "eta": [[0.05], [], []],
-            "phi": [[0.05], [], []],
-            "pfRelIso04_all": [[0.05], [], []],
         }
     )
     trigobj = ak.zip(
@@ -112,73 +115,9 @@ def events():
         }
     )
     return ak.zip(
-        {"Jet": jets, "JetGood": jets, "Muon": muons, "TrigObj": trigobj},
+        {"Jet": jets, "JetGood": jets, "TrigObj": trigobj},
         depth_limit=1,
     )
-
-
-def test_registered_variables():
-    for variable in ["jet_pt", "alljet_ht", "calojet_ht", "atanh_btag_mean"]:
-        assert variable in trigger_sf_variables
-
-
-def test_jet_pt(events):
-    # the collection is sorted by b-tagging score: the jets have to be sorted by pt
-    assert np.allclose(
-        get_trigger_sf_variable(events, {"name": "jet_pt", "index": 1}),
-        [120.0, 80.0, 200.0],
-    )
-    assert np.allclose(
-        get_trigger_sf_variable(events, {"name": "jet_pt", "index": 2}),
-        [40.0, 60.0, 10.0],
-    )
-    # events with less than `index` jets are filled with the padding value
-    assert np.allclose(
-        get_trigger_sf_variable(events, {"name": "jet_pt", "index": 4}),
-        [25.0, 0.0, 0.0],
-    )
-    assert np.allclose(
-        get_trigger_sf_variable(
-            events, {"name": "jet_pt", "index": 4, "pad_value": -1.0}
-        ),
-        [25.0, -1.0, -1.0],
-    )
-
-
-def test_alljet_ht(events):
-    # only the jets with pt >= 30 and |eta| < 2.5 are considered
-    assert np.allclose(
-        get_trigger_sf_variable(events, {"name": "alljet_ht"}),
-        [40.0 + 120.0 + 35.0, 80.0 + 60.0, 200.0],
-    )
-
-
-def test_calojet_ht(events):
-    # the first jet of the first event is close to an isolated muon and has a small
-    # muon/EM energy fraction: it is not included in the Calo-HT.
-    # The third jet is close to no muon (and has muEF > 0.5): it is included.
-    assert np.allclose(
-        get_trigger_sf_variable(events, {"name": "calojet_ht"}),
-        [120.0 + 35.0, 80.0 + 60.0, 200.0],
-    )
-    # if the muon is not isolated the jet is not identified as a muon
-    assert np.allclose(
-        get_trigger_sf_variable(events, {"name": "calojet_ht", "muon_iso": 0.0}),
-        [40.0 + 120.0 + 35.0, 80.0 + 60.0, 200.0],
-    )
-
-
-def test_atanh_btag_mean(events):
-    assert np.allclose(
-        get_trigger_sf_variable(events, {"name": "atanh_btag_mean"}),
-        np.arctanh([(0.9 + 0.8) / 2, (0.99 + 0.01) / 2, (0.5 + 0.5) / 2]),
-    )
-    # the score is clipped to avoid infinities
-    assert np.isfinite(
-        get_trigger_sf_variable(
-            events, {"name": "atanh_btag_mean", "n": 1, "field": "btagPNetB"}
-        )
-    ).all()
 
 
 def test_sf_trigger(events, correction_file):
@@ -187,22 +126,19 @@ def test_sf_trigger(events, correction_file):
             "2022_postEE": {
                 "file": correction_file,
                 "corrections": [
-                    {"name": "sf_L1All", "variable": {"name": "calojet_ht"}},
-                    {
-                        "name": "sf_1PFCentralJetTightIDPt70",
-                        "variable": {"name": "jet_pt", "index": 1},
-                    },
+                    {"name": "sf_A", "variable": {"name": "_test_n_jets"}},
+                    {"name": "sf_B", "variable": {"name": "_test_leading_jet_pt"}},
                 ],
             }
         }
     }
     sf, up, down = sf_trigger(params, events, "2022_postEE")
 
-    # calojet_ht = [155, 140, 200] --> L1 SF = [0.9, 0.9, 1.0]
-    # leading jet pt = [120, 80, 200] --> jet SF = [1.0, 1.0, 1.0] (flow clamped)
-    assert np.allclose(sf, [0.9 * 1.0, 0.9 * 1.0, 1.0 * 1.0])
-    assert np.allclose(up, [0.95 * 1.2, 0.95 * 1.2, 1.1 * 1.2])
-    assert np.allclose(down, [0.85 * 0.8, 0.85 * 0.8, 0.9 * 0.8])
+    # n_jets = [4, 2, 2] --> sf_A = [0.9, 0.5, 0.5]
+    # leading jet pt = [120, 80, 200] --> sf_B = [1.0, 1.0, 1.0] (flow clamped)
+    assert np.allclose(sf, [0.9 * 1.0, 0.5 * 1.0, 0.5 * 1.0])
+    assert np.allclose(up, [0.95 * 1.2, 0.6 * 1.2, 0.6 * 1.2])
+    assert np.allclose(down, [0.85 * 0.8, 0.4 * 0.8, 0.4 * 0.8])
 
     # the scale factor is the same if the correction set is loaded externally
     sf_2, _, _ = sf_trigger(
@@ -219,6 +155,11 @@ def test_sf_trigger_missing_config(events):
         sf_trigger({}, events, "2022_postEE")
     with pytest.raises(Exception):
         sf_trigger({"trigger_scale_factors": {}}, events, "2018")
+
+
+def test_get_trigger_sf_variable_unknown():
+    with pytest.raises(Exception):
+        get_trigger_sf_variable(None, {"name": "not_registered"})
 
 
 OBJECT_TYPES = {

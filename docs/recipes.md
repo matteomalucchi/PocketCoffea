@@ -1397,22 +1397,10 @@ trigger_scale_factors:
           n: 2
 ```
 
-The available observables are the functions registered in `pocket_coffea.lib.trigger_sf.trigger_sf_variables`:
-
-| Observable | Description | Options |
-| --- | --- | --- |
-| `jet_pt` | pt of the `index`-th leading in pt jet | `collection` (`JetGood`), `index` (1), `pad_value` (0.) |
-| `alljet_ht` | scalar sum of the pt of all the jets in the acceptance | `collection` (`Jet`), `pt` (30.), `eta` (2.5) |
-| `calojet_ht` | as `alljet_ht`, excluding the jets identified as muons | as `alljet_ht` plus `muon_collection` (`Muon`), `muon_iso_field` (`pfRelIso04_all`), `muon_iso` (0.15), `muon_dr` (0.4), `muEF` (0.5), `chEmEF` (0.5), `neEmEF` (0.8) |
-| `atanh_btag_mean` | atanh of the average b-tagging score of the `n` leading in b-tagging score jets | `collection` (`JetGood`), `field` (`btagPNetB`), `n` (2) |
-
-:::{tip}
-The jets are always explicitly sorted by the relevant quantity, so the observables are correct also if the collection is
-sorted differently by the analysis (e.g. by b-tagging score).
-:::
-
-A custom observable can be added by the user in the configuration folder with the `register_trigger_sf_variable`
-decorator (remember to register the module with `cloudpickle` to make it available to the workers):
+PocketCoffea ships **no observable of its own**: `pocket_coffea.lib.trigger_sf.trigger_sf_variables` starts empty, and
+the observables above (`calojet_ht`, `jet_pt`, `atanh_btag_mean`) are specific to the set of trigger scale factors being
+applied (here, the jet trigger of the HH4b analysis) — they are defined and registered by the analysis configuration
+with the `register_trigger_sf_variable` decorator, not provided by the framework:
 
 ```python
 from pocket_coffea.lib.trigger_sf import register_trigger_sf_variable
@@ -1422,6 +1410,15 @@ def my_variable(events, cfg):
     # cfg contains the configuration of the observable in the parameters
     return events[cfg.get("collection", "JetGood")].pt[:, 0]
 ```
+
+Remember to register the module with `cloudpickle` to make it available to the workers. See
+[`configs/HH4b_common`](https://github.com/PocketCoffea/AnalysisConfigs) in AnalysisConfigs for a real-world example
+defining `jet_pt`, `alljet_ht`, `calojet_ht` and `atanh_btag_mean` for a jet trigger.
+
+:::{tip}
+The jets are always explicitly sorted by the relevant quantity, so an observable like the ones above is correct also if
+the collection is sorted differently by the analysis (e.g. by b-tagging score).
+:::
 
 #### 3. Apply the weight
 
