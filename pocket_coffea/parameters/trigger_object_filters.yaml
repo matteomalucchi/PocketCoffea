@@ -46,44 +46,36 @@
 #   `n_objects` (`0` is conventionally used for them, purely for documentation).
 # - `threshold`: online threshold of the filter. Not used by the matching itself,
 #   kept only for bookkeeping / cross-checking against the trigger name.
-# - `name`: name of the filter, matching the naming used to derive its trigger
-#   scale factor in `trigger_scale_factors.yaml` (see the conversion script
-#   documented in the recipe).
+# - `name`: name of the filter, matching the naming used for its correction in
+#   `trigger_scale_factors.yaml`.
 # - `collection` (optional): offline collection to match this filter's trigger
 #   objects against, overriding the `default_collection` of `type` in
 #   `trigger_object_types.yaml`. Use this when an analysis needs a
 #   filter-specific collection (e.g. a VBF-tagged jet collection for one filter
 #   of a multi-jet trigger, while the rest match the default `JetGood`).
 #
-# Example for a hypothetical NanoAOD v12 analysis combining an all-hadronic
-# multi-jet+HT trigger and an electron-muon cross trigger (both commented out):
+# Example for a hypothetical NanoAOD v12 analysis combining a multi-jet+HT
+# trigger and an electron-muon cross trigger (both commented out):
 #
 # trigger_object_filters:
 #   12:
-#     # All-hadronic trigger: 4 jets (matched to the default `JetGood`) plus one
+#     # Multi-jet trigger: 2 jets (matched to the default `JetGood`) plus one
 #     # PFHT filter (HT is a global quantity, never matched to offline objects).
-#     HLT_QuadPFJet70_50_40_35_PFBTagParticleNet_2BTagSum0p65:
-#       - "Jet:4:4:35:4PFCentralJetTightIDPt35"
-#       - "Jet:8:3:40:3PFCentralJetTightIDPt40"
-#       - "Jet:21:2:50:2PFCentralJetTightIDPt50"
-#       - "Jet:23:1:70:1PFCentralJetTightIDPt70"
-#       - "Jet:26:2:0.65:BTagCentralJetPt35PFParticleNet2BTagSum0p65"
-#     HLT_PFHT280_QuadPFJet30_PNet2BTagMean0p55:
-#       - "Jet:3:4:30:4PFCentralJetTightIDPt30"
-#       - "HT:5:0:280:PFHT280Jet30"
-#       - "Jet:26:2:0.55:PFCentralJetPt30PNet2BTagMean0p55"
+#     HLT_MyJetTrigger:
+#       - "Jet:4:2:35:2jets_pt35"
+#       - "HT:5:0:280:ht_filter280"
 #     # Electron-muon cross trigger: each leg matched to its own lepton
 #     # collection, set explicitly since `type` here would default to
 #     # `ElectronGood`/`MuonGood` but a different collection is wanted for the
 #     # electron leg in this hypothetical example.
-#     HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL:
+#     HLT_MyCrossTrigger:
 #       - {type: Muon, bit: 3, n_objects: 1, threshold: 12, name: 1mu, collection: MuonGood}
-#       - {type: Electron, bit: 6, n_objects: 1, threshold: 23, name: 1e-1mu, collection: ElectronGoodTight}
+#       - {type: Electron, bit: 6, n_objects: 1, threshold: 23, name: 1e_1mu, collection: ElectronGoodTight}
 #   15:
 #     # Same physics triggers, re-derived for NanoAOD v15: only the bit indices
 #     # change (see the version's own autoDoc), the structure is identical.
-#     HLT_QuadPFJet70_50_40_35_PFBTagParticleNet_2BTagSum0p65:
-#       - "Jet:34:4:25:4PFCentralJetTightIDPt25"
-#       - "Jet:35:2:0.55:PFCentralJetPt25PNet2BTagMean0p55"
+#     HLT_MyJetTrigger:
+#       - "Jet:34:2:35:2jets_pt35"
+#       - "HT:12:0:280:ht_filter280"
 
 trigger_object_filters: {}
