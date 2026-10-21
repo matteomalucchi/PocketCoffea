@@ -1,6 +1,11 @@
 import awkward as ak
 from .cut_definition import Cut
-from .triggers import get_trigger_mask_byprimarydataset,  apply_trigger_mask, remove_trigger_prefix
+from .triggers import (
+    get_trigger_mask_byprimarydataset,
+    apply_trigger_mask,
+    remove_trigger_prefix,
+    get_trigger_object_matching_mask,
+)
 import correctionlib
 from pocket_coffea.lib.correction_cache import load_correction_set
 import numpy as np
@@ -124,6 +129,70 @@ def get_L1sel_custom(trigger_list, invert=False):
             invert=params["invert"],
             trigger_type="L1")
     )
+
+def get_trigger_object_matching(
+    triggers=None,
+    dr_max=0.5,
+    params_key="trigger_object_filters",
+    object_types_key="trigger_object_types",
+    name=None,
+):
+    '''Create the trigger object matching mask.
+
+    The offline objects are matched to the trigger objects firing each of the
+    filters of the triggers, as configured filter-by-filter in the
+    `trigger_object_filters` parameters (see
+    `pocket_coffea.lib.triggers.get_trigger_object_matching_masks`): both the type
+    of trigger object and the offline collection it is matched against are
+    generic, resolved per filter via the `trigger_object_types` registry.
+    The mask is the OR of the matching of the requested triggers.
+
+    This selection is needed to apply the trigger scale factors derived
+    filter-by-filter (see the `sf_trigger` weight).
+
+    The meaning of the `TrigObj_filterBits` bits is not consistent between NanoAOD
+    versions, so `trigger_object_filters` is configured per NanoAOD version: the
+    version of the chunk being processed is resolved with
+    `pocket_coffea.utils.utils.get_nano_version`.
+
+    :param triggers: (optional) list of triggers to consider. If None all the
+                     triggers configured for the NanoAOD version are used.
+    :param dr_max: maximum deltaR between the trigger object and the offline object
+    :param params_key: key of the parameters with the trigger filters configuration,
+                       indexed by NanoAOD version
+    :param object_types_key: key of the parameters with the trigger object types
+                             registry (see `parameters/trigger_object_types.yaml`)
+    '''
+    if name is None:
+        name = "trigger_object_matching"
+        if triggers is not None:
+            name += "_" + "_".join(triggers)
+
+    def _get_trigger_object_matching_mask(events, params, processor_params, year, **kwargs):
+        # Import here to prevent circular import configurator -> cuts -> cut_functions -> utils -> configurator
+        from pocket_coffea.utils.utils import get_nano_version
+
+        return get_trigger_object_matching_mask(
+            events,
+            trigger_filters=processor_params[params["params_key"]][
+                get_nano_version(events, processor_params, year)
+            ],
+            object_types=processor_params[params["object_types_key"]],
+            triggers=params["triggers"],
+            dr_max=params["dr_max"],
+        )
+
+    return Cut(
+        name=name,
+        params={
+            "triggers": triggers,
+            "dr_max": dr_max,
+            "params_key": params_key,
+            "object_types_key": object_types_key,
+        },
+        function=_get_trigger_object_matching_mask,
+    )
+
 
 ###########################
 ## Implementation of JetVetoMaps 
