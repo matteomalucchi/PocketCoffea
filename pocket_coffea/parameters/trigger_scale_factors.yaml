@@ -1,0 +1,36 @@
+# Configuration of the trigger scale factors applied by the `sf_trigger` weight.
+#
+# The scale factors are derived filter-by-filter: the total scale factor is the
+# product of the data/MC efficiency ratios of the single filters of the trigger
+# path (plus, if relevant, the one of the OR of the L1 seeds), each of them
+# evaluated as a function of a different observable.
+#
+# The per-filter scale factors are read from a correctionlib file: how that file
+# is produced (e.g. from efficiency curves fitted on data and simulation) is up
+# to the analysis, see the `Trigger scale factors` recipe in the documentation.
+# Each correction takes as input the `systematic` (`nominal`, `up`, `down`) and
+# the value of the observable.
+#
+# The configuration below is just a template: the file and the list of the
+# corrections have to be provided by the user for each data-taking period, e.g.
+#
+# trigger_scale_factors:
+#   "my_period":
+#     file: /path/to/trigger_sf_my_period.json.gz
+#     corrections:
+#       - name: sf_filter_1
+#         variable:
+#           name: my_variable_1
+#           collection: MyCollection
+#       - name: sf_filter_2
+#         variable:
+#           name: my_variable_2
+#           collection: MyOtherCollection
+#           index: 1
+#
+# `pocket_coffea.lib.trigger_sf.trigger_sf_variables` starts empty: the
+# observables (`my_variable_1`, `my_variable_2` above) are specific to the set
+# of trigger scale factors being applied, and must be registered by the
+# analysis with the `register_trigger_sf_variable` decorator.
+
+trigger_scale_factors: {}
