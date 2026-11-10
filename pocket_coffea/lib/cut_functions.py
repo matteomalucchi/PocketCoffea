@@ -1,6 +1,7 @@
 import awkward as ak
 from .cut_definition import Cut
 from .triggers import get_trigger_mask_byprimarydataset,  apply_trigger_mask, remove_trigger_prefix
+from .deltaR_matching import delta_r_table
 import correctionlib
 from pocket_coffea.lib.correction_cache import load_correction_set
 import numpy as np
@@ -126,7 +127,78 @@ def get_L1sel_custom(trigger_list, invert=False):
     )
 
 ###########################
-## Implementation of JetVetoMaps 
+## Trigger object matching
+
+def trigger_object_matching_mask(objects, trigger_objects, dr_max=0.5):
+    '''Per-object mask, True where the object is matched to at least one trigger
+    object within `dr_max`.
+
+    :param objects: jagged collection of offline objects (e.g. `events.JetGood`)
+    :param trigger_objects: jagged collection of trigger objects (e.g. `events.TrigObj`)
+    :param dr_max: maximum deltaR between an object and a trigger object
+    :returns: boolean array with the same jagged structure as `objects`
+    '''
+    dr = delta_r_table(objects, trigger_objects)
+    return ak.any(dr < dr_max, axis=-1)
+
+
+def get_trigger_object_matching(
+    collection="JetGood",
+    trigger_collection="TrigObj",
+    dr_max=0.5,
+    require="all",
+    name=None,
+):
+    '''Build the `Cut` requiring the objects of `collection` to be matched, within
+    `dr_max`, to a trigger object of `trigger_collection`.
+
+    A plain deltaR matching, with no notion of filter bits, trigger names or
+    NanoAOD version: it is enough to implement the usual analysis-note recipe,
+    e.g. "a trigger-object matching is performed using all selected jets in the
+    event with a deltaR(trigger obj., jet) < 0.5" via
+    `get_trigger_object_matching(collection="JetGood", dr_max=0.5)`.
+
+    :param collection: offline collection whose objects must be matched (default `JetGood`).
+    :param trigger_collection: collection of trigger objects (default the raw `TrigObj`).
+    :param dr_max: maximum deltaR between an object of `collection` and a trigger object.
+    :param require: `"all"` requires every object of `collection` to be matched (the
+                    usual "matching performed using all selected jets" recipe); `"any"`
+                    requires at least one object matched.
+    :param name: name of the cut (default derived from `collection` and `dr_max`).
+
+    N.B: an event with zero objects in `collection` passes the `"all"` requirement
+    vacuously; apply this cut after a selection already requiring a minimum number
+    of objects if that is not the intended behaviour.
+    '''
+    if require not in ("all", "any"):
+        raise ValueError(f"`require` must be `all` or `any`, got `{require}`")
+    if name is None:
+        name = f"trigger_object_matching_{collection}_dr{dr_max}"
+
+    def _trigger_object_matching_mask(events, params, **kwargs):
+        objects = events[params["collection"]]
+        trigger_objects = events[params["trigger_collection"]]
+        matched = trigger_object_matching_mask(
+            objects, trigger_objects, params["dr_max"]
+        )
+        if params["require"] == "all":
+            return ak.all(matched, axis=1)
+        return ak.any(matched, axis=1)
+
+    return Cut(
+        name=name,
+        params={
+            "collection": collection,
+            "trigger_collection": trigger_collection,
+            "dr_max": dr_max,
+            "require": require,
+        },
+        function=_trigger_object_matching_mask,
+    )
+
+
+###########################
+## Implementation of JetVetoMaps
 ## (Recommended for Run 3, see https://cms-jerc.web.cern.ch/Recommendations/#jet-veto-maps)
 
 def get_JetVetoMap(name="JetVetoMaps"):
