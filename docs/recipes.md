@@ -54,6 +54,29 @@ Trigger cuts read raw NanoAOD branches and therefore belong in `skim`, never in
 `preselections` — object corrections happen *after* the skim, inside the calibration loop.
 :::
 
+## Trigger object matching
+
+`get_trigger_object_matching` (`pocket_coffea.lib.cut_functions`) builds a `Cut` requiring the
+objects of an offline collection to be matched, within a given deltaR, to a trigger object
+(`events.TrigObj` by default) — e.g. "a trigger-object matching is performed using all selected
+jets in the event with a deltaR(trigger obj., jet) < 0.5":
+
+```python
+from pocket_coffea.lib.cut_functions import get_trigger_object_matching
+
+cfg = Configurator(
+    preselections=[..., get_trigger_object_matching(collection="JetGood", dr_max=0.5)],
+    ...
+)
+```
+
+`require="all"` (the default) requires every object of `collection` to be matched; `require="any"`
+only one. This is a plain deltaR matching with no notion of filter bits, trigger names or NanoAOD
+version — it is meant for the common "match the selected objects to any trigger object" recipe, not
+for validating the fiducial region of a scale factor measured filter-by-filter, which needs a more
+specific implementation (e.g. matching each filter's own trigger object type/bit) kept in the
+analysis configuration rather than in the framework.
+
 ## Define a new cut function
 
 A selection is a `Cut` object (`pocket_coffea.lib.cut_definition.Cut`) wrapping a function

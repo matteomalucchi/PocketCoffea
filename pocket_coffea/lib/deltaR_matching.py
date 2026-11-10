@@ -82,6 +82,22 @@ def metric_phi(obj, obj2):
     return abs(delta_phi(obj.phi,obj2.phi))
 
 
+def delta_r_table(obj, other):
+    '''DeltaR between all the pairs of objects of two jagged collections.
+
+    Unlike `object_matching`, this does not assign a unique, one-to-one pairing:
+    it is the plain deltaR of every (obj, other) pair, letting the caller decide
+    how to use it (e.g. "is any element of `other` within some deltaR", with no
+    notion of depleting `other` as objects of `obj` are matched to it).
+
+    :returns: array with dimension (n_events, n_obj, n_other)
+    '''
+    first, second = ak.unzip(ak.cartesian([obj, other], axis=1, nested=True))
+    return np.sqrt(
+        (first.eta - second.eta) ** 2 + delta_phi(first.phi, second.phi) ** 2
+    )
+
+
 def object_matching(obj, obj2, dr_min, dpt_max=None, return_indices=False):
     # Compute deltaR(quark, jet) and save the nearest jet (deltaR matching)
     deltaR = ak.flatten(obj.metric_table(obj2), axis=2)
